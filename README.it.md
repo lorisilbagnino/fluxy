@@ -8,6 +8,19 @@ Estensione per browser Chromium e Firefox (testata su **Brave Origin 157** e **F
 **HLS** e **DASH** caricati dalle pagine, ti fa scegliere qualità video, tracce audio e sottotitoli, e li salva in
 **un unico MKV o MP4 senza ricodifica**. Interfaccia in italiano e inglese (segue la lingua del browser).
 
+<p align="center"><img src="docs/store/images/it/promo-marquee-1400x560.png" alt="Fluxy" width="100%"></p>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/store/images/it/screenshot-1-popup.png" alt="Scegli qualità video, lingue audio e sottotitoli"><br><sub>Scegli qualità video, lingue audio e sottotitoli</sub></td>
+<td width="50%"><img src="docs/store/images/it/screenshot-2-three-streams.png" alt="Tre flussi, un file — senza ricodifica"><br><sub>Tre flussi, un file — senza ricodifica</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/store/images/it/screenshot-3-how-it-works.png" alt="Rileva, scegli, scarica"><br><sub>Rileva, scegli, scarica</sub></td>
+<td width="50%"><img src="docs/store/images/it/screenshot-4-engines.png" alt="Tutto nel browser, o con l'app locale"><br><sub>Tutto nel browser, o con l'app locale</sub></td>
+</tr>
+</table>
+
 ## Due motori (⚙ → Motore)
 
 | | **Tutto nel browser** (predefinito) | **App locale** |

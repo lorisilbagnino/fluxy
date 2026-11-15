@@ -202,6 +202,7 @@ Ogni immagine esiste in `images/en/` e `images/it/`:
 | `screenshot-5-progress.png` | 1280×800 | CWS/AMO: download in corso e completato |
 | `promo-small-440x280.png` | 440×280 | CWS: piccolo riquadro promozionale (obbligatorio) |
 | `promo-marquee-1400x560.png` | 1400×560 | CWS: riquadro grande (facoltativo) |
+| `social-preview-1280x640.png` | 1280×640 | GitHub: anteprima dei link (Settings → Social preview) |
 | `icons/icon128.png` (nell'estensione) | 128×128 | Icona dello store |
 
 I sorgenti HTML sono in `docs/store/src/` (testi in `src/strings.js`); si rigenerano con `node docs/store/render.mjs`.

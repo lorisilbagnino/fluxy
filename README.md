@@ -8,6 +8,19 @@ Browser extension for Chromium and Firefox (tested on **Brave Origin 157** and *
 and **DASH** streams loaded by web pages, lets you pick the video quality, audio tracks and subtitles, and saves them
 as **one MKV or MP4 without re-encoding**. Interface in English and Italian (it follows the browser's language).
 
+<p align="center"><img src="docs/store/images/en/promo-marquee-1400x560.png" alt="Fluxy" width="100%"></p>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/store/images/en/screenshot-1-popup.png" alt="Pick video quality, audio languages and subtitles"><br><sub>Pick video quality, audio languages and subtitles</sub></td>
+<td width="50%"><img src="docs/store/images/en/screenshot-2-three-streams.png" alt="Three streams, one file — no re-encoding"><br><sub>Three streams, one file — no re-encoding</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/store/images/en/screenshot-3-how-it-works.png" alt="Detect, choose, download"><br><sub>Detect, choose, download</sub></td>
+<td width="50%"><img src="docs/store/images/en/screenshot-4-engines.png" alt="All in the browser, or with the local app"><br><sub>All in the browser, or with the local app</sub></td>
+</tr>
+</table>
+
 ## Two engines (⚙ → Engine)
 
 | | **All in the browser** (default) | **Local app** |

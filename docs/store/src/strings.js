@@ -70,6 +70,7 @@ const STRINGS = {
   m_lead: ['Save HLS and DASH streams as one <b style="color:var(--text)">MKV or MP4</b>, with the languages and subtitles you pick. <em style="font-style:normal;color:var(--accent)">No re-encoding.</em>',
     'Salva gli stream HLS e DASH in un unico <b style="color:var(--text)">MKV o MP4</b>, con le lingue e i sottotitoli che scegli. <em style="font-style:normal;color:var(--accent)">Senza ricodifica.</em>'],
   m_subs: ['subtitles', 'sottotitoli'],
+  sp_open: ['Free', 'Gratuito'],
 };
 
 (() => {

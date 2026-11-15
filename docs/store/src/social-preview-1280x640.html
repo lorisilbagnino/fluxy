@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<style>
+  .wrap { display: grid; grid-template-columns: 400px 1fr; align-items: center; height: 100%; padding: 0 80px; gap: 56px; }
+  .logo { position: relative; width: 360px; height: 360px; }
+  .logo img { width: 100%; height: 100%; filter: drop-shadow(0 0 46px #ffb02055); }
+  .lbl { position: absolute; font-size: 16px; font-weight: 600; padding: 5px 12px; border-radius: 999px; background: #0d1016cc; border: 1px solid var(--border); }
+  h1 { font-size: 92px; }
+  .lead { font-size: 25px; margin-top: 16px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
+</style></head><body><div class="wrap">
+  <div class="logo"><img src="assets/icon.svg">
+    <span class="lbl" style="left:-8px;top:14px;color:var(--video)">video</span>
+    <span class="lbl" style="right:-12px;top:14px;color:var(--audio)">audio</span>
+    <span class="lbl" style="left:205px;bottom:-6px;color:var(--subs)" data-t="m_subs"></span>
+  </div>
+  <div>
+    <h1>Fluxy</h1>
+    <p class="lead" data-t="m_lead"></p>
+    <div class="chips">
+      <span class="chip">HLS · DASH</span><span class="chip">MKV · MP4</span>
+      <span class="chip">Chrome · Brave · Edge · Firefox</span><span class="chip" data-t="sp_open"></span>
+    </div>
+  </div>
+</div><script src="strings.js"></script></body></html>
