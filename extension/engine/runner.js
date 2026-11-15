@@ -138,7 +138,7 @@ async function run(jobId, spec, job, emit, bridge) {
 }
 
 // ------------------------------------------------------------ recording ---
-const REC_PORT = 'flux-rec:';
+const REC_PORT = 'fluxy-rec:';
 
 export const isRecordingPort = (port) => port.name.startsWith(REC_PORT);
 
@@ -157,7 +157,7 @@ async function sniffExt(file) {
 }
 
 /**
- * A <video> recording from recorder/page.js. Port name: flux-rec:<jobId>:<container>.
+ * A <video> recording from recorder/page.js. Port name: fluxy-rec:<jobId>:<container>.
  * MediaRecorder chunks arrive on the port (base64) and are appended to OPFS; at the
  * end the file is rewritten into the chosen container (MediaRecorder leaves out
  * duration and cues, so players can't seek) — or saved as recorded if that fails.

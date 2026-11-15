@@ -1,4 +1,4 @@
-// Flux Capacitor — content-script side of the video recorder (isolated world).
+// Fluxy — content-script side of the video recorder (isolated world).
 // Relays between page.js (window messages) and the extension: job creation via
 // the background, recorded chunks over a port to the engine (offscreen document
 // on Chromium, background page on Firefox), stop/cancel requests from the popup.
@@ -6,8 +6,8 @@
 (() => {
   if (globalThis.__fluxRecBridge) return;
 
-  const TAG = 'flux-capacitor-rec';
-  const PORT_PREFIX = 'flux-rec:';
+  const TAG = 'fluxy-rec';
+  const PORT_PREFIX = 'fluxy-rec:';
   let armed = false;    // the popup started a video pick in this tab
   let allowed = 0;      // videos the user picked in this frame: one recording each
   const recs = new Map();   // rid -> {jobId, port, ended}

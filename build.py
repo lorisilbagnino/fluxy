@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Build Flux Capacitor for Chromium-based browsers and Firefox.
+"""Build Fluxy for Chromium-based browsers and Firefox.
 
     ./build.py            -> dist/chromium/, dist/firefox/ (unpacked)
-                             dist/flux-capacitor-<ver>-chromium.zip
-                             dist/flux-capacitor-<ver>-firefox.xpi
+                             dist/fluxy-<ver>-chromium.zip      load unpacked (fixed ID via "key")
+                             dist/fluxy-<ver>-firefox.xpi       Firefox / AMO upload
+                             dist/fluxy-<ver>-chrome-store.zip  Chrome Web Store / Edge Add-ons upload
 
 `extension/` is the source and stays loadable unpacked in Chromium as is
 (after a first ./build.py, which also copies the native host into
@@ -18,19 +19,26 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "extension"
 DIST = ROOT / "dist"
-GECKO_ID = "flux-capacitor@fluxcapacitor.local"   # must match host/install.sh
+GECKO_ID = "fluxy@fluxy-downloader.addon"   # must match host/install.sh
 SKIP = {".DS_Store"}
-NATIVE = [ROOT / "host" / "flux_host.py", ROOT / "host" / "install.sh"]   # bundled for the installer button
+NATIVE = [ROOT / "host" / "fluxy_host.py", ROOT / "host" / "install.sh"]   # bundled for the installer button
 
 
 def sync_native():
     dest = SRC / "native"
-    dest.mkdir(exist_ok=True)
+    shutil.rmtree(dest, ignore_errors=True)   # no stale files from renamed sources
+    dest.mkdir()
     for f in NATIVE:
         shutil.copy2(f, dest / f.name)
 
 
 def chromium_manifest(m: dict) -> dict:
+    return m
+
+
+def store_manifest(m: dict) -> dict:
+    m = dict(m)
+    m.pop("key", None)   # the store assigns the ID; uploads with "key" are rejected
     return m
 
 
@@ -74,9 +82,10 @@ def main():
     version = json.loads((SRC / "manifest.json").read_text(encoding="utf-8"))["version"]
     sync_native()
     DIST.mkdir(exist_ok=True)
-    for target, transform, ext in (("chromium", chromium_manifest, "zip"), ("firefox", firefox_manifest, "xpi")):
+    for target, transform, ext in (("chromium", chromium_manifest, "zip"), ("firefox", firefox_manifest, "xpi"),
+                                   ("chrome-store", store_manifest, "zip")):
         folder = build(target, transform)
-        archive = DIST / f"flux-capacitor-{version}-{target}.{ext}"
+        archive = DIST / f"fluxy-{version}-{target}.{ext}"
         pack(folder, archive)
         print(f"✓ {target:9} {folder.relative_to(ROOT)}/  →  {archive.relative_to(ROOT)}")
 

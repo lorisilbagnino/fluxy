@@ -1,14 +1,14 @@
-// Flux Capacitor — page side of the video recorder, injected in the page's MAIN world
+// Fluxy — page side of the video recorder, injected in the page's MAIN world
 // (Firefox content scripts can't hand the page's MediaStreams to MediaRecorder).
 // Lets the user pick a <video>, records it and passes the chunks to bridge.js.
 // No innerHTML and no <style>/style attributes: pages with Trusted Types or a
 // strict CSP (Google Meet, Teams...) would block them.
 
 (() => {
-  const KEY = Symbol.for('flux-capacitor-recorder');
+  const KEY = Symbol.for('fluxy-recorder');
   if (window[KEY]) return;
 
-  const TAG = 'flux-capacitor-rec';
+  const TAG = 'fluxy-rec';
   const MIMES_VIDEO = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
   const MIMES_AUDIO = ['audio/webm;codecs=opus', 'audio/webm'];
   // MP4 target: H.264 straight from MediaRecorder (Chromium) leaves only a remux to do
@@ -73,7 +73,7 @@ button { cursor: pointer; font: inherit; }
   // Creates the overlay host (closed shadow root) on first use.
   function ensureUI() {
     if (ui) return ui;
-    const host = document.createElement('flux-capacitor-ui');
+    const host = document.createElement('fluxy-ui');
     for (const [k, v] of [['position', 'fixed'], ['inset', '0'], ['z-index', '2147483647'], ['pointer-events', 'none'], ['display', 'block']]) {
       host.style.setProperty(k, v, 'important');
     }
@@ -180,7 +180,7 @@ button { cursor: pointer; font: inherit; }
     const usable = boxes.filter((b) => b.dataset.kind !== 'null').length;
     if (usable) {
       picking.banner = h('div', { class: 'banner' },
-        h('span', {}, 'Flux Capacitor: clicca il video da registrare'),
+        h('span', {}, 'Fluxy: clicca il video da registrare'),
         h('button', { class: 'ghost', onclick: () => { post({ type: 'cancelPick' }); endPick(); } }, 'Annulla'));
       ui.root.append(picking.banner);
     }
@@ -291,7 +291,7 @@ button { cursor: pointer; font: inherit; }
   function render(rec) {
     const v = rec.video;
     const close = h('button', { class: 'x', title: 'Chiudi', onclick: () => closePanel(rec) }, '×');
-    const head = h('div', { class: 'head' }, h('span', { class: 'title' }, '⚡ Flux Capacitor'));
+    const head = h('div', { class: 'head' }, h('span', { class: 'title' }, 'Fluxy'));
     const body = [];
     rec.ring.classList.toggle('rec', rec.state === 'rec');
 

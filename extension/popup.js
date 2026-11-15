@@ -1,10 +1,11 @@
-import { DEFAULT_SETTINGS, childSet, isChild } from './shared.js';
+import { DEFAULT_SETTINGS, childSet, isChild, isBlockedUrl } from './shared.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const send = (msg) => chrome.runtime.sendMessage(msg);
 
 let tabId = null;
 let tabTitle = '';
+let tabUrl = '';
 let settings = { ...DEFAULT_SETTINGS };
 const selection = {};          // streamId -> {videoId, audioIds:Set, subIds:Set, container, filename}
 let lastStreamsSig = '';
@@ -233,7 +234,7 @@ async function installLocalApp() {
   help.replaceChildren(
     el('span', {}, 'Installer salvato in Download. Apri un terminale ed esegui:'),
     el('code', {}, cmd),
-    el('span', { class: 'muted' }, "Copia l'app in ~/.local/share/flux-capacitor, la registra in Brave/Chrome/Firefox e propone di installare ffmpeg e yt-dlp se mancano."),
+    el('span', { class: 'muted' }, "Copia l'app in ~/.local/share/fluxy, la registra in Brave/Chrome/Firefox e propone di installare ffmpeg e yt-dlp se mancano."),
     el('div', { class: 'row-actions' }, copy, el('button', { class: 'link', onclick: () => send({ type: 'hostCheck' }) }, 'fatto, verifica')),
   );
 }
@@ -241,7 +242,7 @@ async function installLocalApp() {
 function renderDetect() {
   const isArmed = armedTabs.includes(tabId);
   const box = $('#detect');
-  box.hidden = settings.autoDetect && !isArmed;
+  box.hidden = isBlockedUrl(tabUrl) || (settings.autoDetect && !isArmed);
   box.classList.toggle('on', isArmed);
   $('#detect-text').textContent = isArmed
     ? 'Rilevamento attivo su questa scheda'
@@ -263,7 +264,9 @@ function renderStreams(streams, force = false) {
   visible.sort((a, b) => ((b.probe?.data?.master ? 1 : 0) - (a.probe?.data?.master ? 1 : 0)) || (b.detectedAt - a.detectedAt));
 
   $('#empty').hidden = visible.length > 0;
-  $('#empty').textContent = settings.autoDetect || armedTabs.includes(tabId)
+  $('#empty').textContent = isBlockedUrl(tabUrl)
+    ? 'I video di YouTube non sono supportati.'
+    : settings.autoDetect || armedTabs.includes(tabId)
     ? 'Nessuno stream ancora. Avvia la riproduzione del video: gli stream compaiono qui appena il player li carica.'
     : 'Rilevamento automatico disattivato. Premi “Rileva”: la pagina viene ricaricata e gli stream che il player carica compaiono qui.';
   $('#btn-clear-tab').hidden = visible.length === 0;
@@ -488,6 +491,7 @@ async function init() {
     : await chrome.tabs.query({ active: true, currentWindow: true });
   tabId = tab?.id ?? -1;
   tabTitle = tab?.title || '';
+  tabUrl = tab?.url || '';
   settings = { ...DEFAULT_SETTINGS, ...(await chrome.storage.local.get('settings')).settings };
   bindSettings();
 

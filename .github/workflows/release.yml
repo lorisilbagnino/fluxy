@@ -1,3 +1,10 @@
+# Build e release: a ogni push su main, se la versione in extension/manifest.json
+# non ha ancora una release, pubblica la release vX.Y.Z con i pacchetti.
+#
+# Facoltativo, firma per Firefox: con i secrets del repository AMO_JWT_ISSUER e
+# AMO_JWT_SECRET (addons.mozilla.org → Developer Hub → Manage API Keys) l'.xpi
+# viene firmato da Mozilla come estensione "non in elenco", installabile in modo
+# permanente in qualsiasi Firefox. Senza, viene allegato l'.xpi non firmato.
 name: Build e release
 
 on:
@@ -15,6 +22,10 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      # step-level env is not visible to a step's own `if`
+      AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+      AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
     steps:
       - uses: actions/checkout@v4
 
@@ -44,16 +55,26 @@ jobs:
       - name: Build
         run: ./build.py
 
+      - name: Firma l'estensione Firefox (non in elenco)
+        if: steps.exists.outputs.exists == 'false' && env.AMO_JWT_ISSUER != ''
+        run: |
+          npx --yes web-ext@8 sign --channel=unlisted --source-dir dist/firefox --artifacts-dir dist/signed \
+            --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET"
+          mv dist/signed/*.xpi "dist/fluxy-${{ steps.version.outputs.version }}-firefox.xpi"
+
       - name: Pubblica la release
         if: steps.exists.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          v="${{ steps.version.outputs.version }}"
+          sed "s/<ver>/$v/g" docs/release-notes.md > dist/release-notes.md
           gh release create "${{ steps.version.outputs.tag }}" \
             --target "$GITHUB_SHA" \
-            --title "Flux Capacitor ${{ steps.version.outputs.version }}" \
-            --generate-notes \
-            "dist/flux-capacitor-${{ steps.version.outputs.version }}-chromium.zip" \
-            "dist/flux-capacitor-${{ steps.version.outputs.version }}-firefox.xpi" \
-            host/flux_host.py \
+            --title "Fluxy $v" \
+            --notes-file dist/release-notes.md --generate-notes \
+            "dist/fluxy-$v-chromium.zip" \
+            "dist/fluxy-$v-firefox.xpi" \
+            "dist/fluxy-$v-chrome-store.zip" \
+            host/fluxy_host.py \
             host/install.sh
