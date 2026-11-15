@@ -1,12 +1,12 @@
-// Flux Capacitor — background (service worker on Chromium, event page on Firefox)
+// Fluxy — background (service worker on Chromium, event page on Firefox)
 // Detects HLS/DASH manifests, analyses them, runs downloads with the in-browser
 // engine (offscreen document / background page) or the optional native host.
 
-import { DEFAULT_SETTINGS, childSet, isChild } from './shared.js';
+import { DEFAULT_SETTINGS, childSet, isChild, isBlockedUrl } from './shared.js';
 import { probeHls } from './engine/hls.js';
 import { fetchText } from './engine/net.js';
 
-const HOST = 'com.fluxcapacitor.host';
+const HOST = 'com.fluxy.host';
 const MANIFEST_URL_RE = /\.(m3u8|mpd)(?:[?#;]|$)/i;
 const MANIFEST_CT_RE = /(mpegurl|dash\+xml)/i;
 const KEEP_HEADER_RE = /^(referer|origin|cookie|user-agent|authorization|x-[\w-]+)$/i;
@@ -161,6 +161,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 });
 
 function onManifest(tabId, info) {
+  if (isBlockedUrl(info.url) || isBlockedUrl(info.initiator)) return;
   withTab(tabId, async (t) => {
     const existing = t.streams.find((s) => s.url === info.url);
     if (existing) {
@@ -170,6 +171,7 @@ function onManifest(tabId, info) {
     let title = '';
     let pageUrl = '';
     try { const tab = await chrome.tabs.get(tabId); title = tab.title || ''; pageUrl = tab.url || ''; } catch {}
+    if (isBlockedUrl(pageUrl)) return;
     const stream = {
       id: crypto.randomUUID().slice(0, 8),
       url: info.url, kind: info.kind, headers: info.headers, initiator: info.initiator,
@@ -611,27 +613,27 @@ async function downloadInstaller() {
     if (!r.ok) throw new Error(`File ${p} mancante nell'estensione: esegui ./build.py`);
     return r.text();
   };
-  const [py, sh] = await Promise.all([get('native/flux_host.py'), get('native/install.sh')]);
+  const [py, sh] = await Promise.all([get('native/fluxy_host.py'), get('native/install.sh')]);
   const ids = IS_FIREFOX ? `FLUX_GECKO_ID=${chrome.runtime.id}` : `FLUX_EXT_ID=${chrome.runtime.id}`;
   const script = [
     '#!/usr/bin/env bash',
-    '# Flux Capacitor — installa l\'app locale (generato dall\'estensione).',
+    '# Fluxy — installa l\'app locale (generato dall\'estensione).',
     '# Esegui:  bash "<questo file>"      Rimuovi:  bash "<questo file>" --uninstall',
     'set -euo pipefail',
     'case "$(uname -s)" in',
-    '  Darwin) FLUX_DEST="$HOME/Library/Application Support/flux-capacitor" ;;',
-    '  *) FLUX_DEST="${XDG_DATA_HOME:-$HOME/.local/share}/flux-capacitor" ;;',
+    '  Darwin) FLUX_DEST="$HOME/Library/Application Support/fluxy" ;;',
+    '  *) FLUX_DEST="${XDG_DATA_HOME:-$HOME/.local/share}/fluxy" ;;',
     'esac',
     'if [[ "${1:-}" != "--uninstall" ]]; then',
     '  mkdir -p "$FLUX_DEST"',
-    "  base64 --decode > \"$FLUX_DEST/flux_host.py\" <<'FLUX_HOST_PAYLOAD'",
+    "  base64 --decode > \"$FLUX_DEST/fluxy_host.py\" <<'FLUX_HOST_PAYLOAD'",
     b64(py),
     'FLUX_HOST_PAYLOAD',
     'fi',
-    `export FLUX_HOST_PATH="$FLUX_DEST/flux_host.py" ${ids}`,
+    `export FLUX_HOST_PATH="$FLUX_DEST/fluxy_host.py" ${ids}`,
     sh.replace(/^#!.*\n/, ''),
   ].join('\n');
-  const name = 'flux-capacitor-install.sh';
+  const name = 'fluxy-install.sh';
   const url = IS_FIREFOX
     ? URL.createObjectURL(new Blob([script], { type: 'application/x-sh' }))
     : `data:application/x-sh;base64,${b64(script).replace(/\n/g, '')}`;

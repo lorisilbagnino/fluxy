@@ -28,3 +28,10 @@ export function isChild(stream, set) {
   if (stream.probe?.status === 'ok' && stream.probe.data?.master) return false;
   return set.has(stream.url) || set.has(stripQuery(stream.url));
 }
+
+// YouTube is out of scope (and its downloads are forbidden by the Chrome Web Store policy).
+const BLOCKED_HOST_RE = /(^|\.)(youtube\.com|youtube-nocookie\.com|youtu\.be|googlevideo\.com|ytimg\.com)$/i;
+
+export function isBlockedUrl(u) {
+  try { return BLOCKED_HOST_RE.test(new URL(u).hostname); } catch { return false; }
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Flux Capacitor native messaging host.
+"""Fluxy native messaging host.
 
 Speaks the Chrome native messaging protocol on stdin/stdout (4-byte little
 endian length + UTF-8 JSON). Probes HLS/DASH manifests, downloads the selected
@@ -7,7 +7,7 @@ renditions with yt-dlp / ffmpeg and muxes them into one MKV/MP4 without
 re-encoding (stream copy).
 
 Can also be run by hand for debugging:
-    flux_host.py probe <url> [Header: value ...]
+    fluxy_host.py probe <url> [Header: value ...]
 """
 from __future__ import annotations
 
@@ -27,8 +27,8 @@ import traceback
 import urllib.parse
 import urllib.request
 
-VERSION = "0.2.0"
-CACHE_DIR = os.path.join(os.path.expanduser("~/.cache"), "flux-capacitor")
+VERSION = "0.3.0"
+CACHE_DIR = os.path.join(os.path.expanduser("~/.cache"), "fluxy")
 LOG_FILE = os.path.join(CACHE_DIR, "host.log")
 UA_FALLBACK = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
                "(KHTML, like Gecko) Chrome/140.0 Safari/537.36")

@@ -1,0 +1,28 @@
+<!doctype html><html lang="it"><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<style>
+  .top { padding: 70px 80px 0; display: flex; flex-direction: column; gap: 16px; }
+  .steps { position: absolute; left: 80px; right: 80px; top: 330px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+  .step { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 30px 28px 32px; display: grid; gap: 14px; align-content: start; min-height: 360px; }
+  .n { width: 46px; height: 46px; border-radius: 50%; background: var(--accent); color: #1a1200; display: grid; place-items: center; font-weight: 800; font-size: 22px; }
+  .step h2 { font-size: 28px; } .step p { color: var(--muted); font-size: 18px; line-height: 1.5; }
+  .ui { margin-top: 8px; border-radius: 12px; background: #11151d; border: 1px solid var(--border); padding: 14px 16px; font-size: 16px; display: grid; gap: 10px; }
+  .btn { justify-self: start; padding: 8px 14px; border-radius: 9px; background: #232a35; border: 1px solid var(--border); }
+  .btn.primary { background: var(--accent); color: #1a1200; font-weight: 700; border: 0; }
+  .row { display: flex; align-items: center; gap: 10px; } .box { width: 18px; height: 18px; border-radius: 4px; background: var(--accent); } .box.off { background: none; border: 2px solid #4a5468; }
+  .live { width: 9px; height: 9px; border-radius: 50%; background: #35c47c; }
+  .arrow { position: absolute; top: 500px; font-size: 34px; color: #4a5468; }
+</style></head><body>
+<div class="top">
+  <div class="brand"><img src="assets/icon.svg">Fluxy</div>
+  <h1>Tre passi, <em>niente da installare</em>.</h1>
+  <p class="lead">Fluxy lavora solo quando glielo chiedi, sulla scheda che scegli.</p>
+</div>
+<div class="steps">
+  <div class="step"><span class="n">1</span><h2>Rileva</h2><p>Apri la pagina del video e premi <b>Rileva</b>: la pagina si ricarica e Fluxy intercetta gli stream del player.</p>
+    <div class="ui"><div class="row"><span class="live"></span>Rilevamento attivo</div><span class="btn">⟳ Rileva</span></div></div>
+  <div class="step"><span class="n">2</span><h2>Scegli</h2><p>Qualità del video, lingue dell'audio, sottotitoli. Le tue lingue preferite sono già selezionate.</p>
+    <div class="ui"><div class="row"><span class="box"></span>1080p · H.264</div><div class="row"><span class="box"></span>Italiano · AAC 2.0</div><div class="row"><span class="box off"></span>Français · AAC 2.0</div></div></div>
+  <div class="step"><span class="n">3</span><h2>Scarica</h2><p>Segmenti in parallelo, unione senza ricodifica, file finale nella cartella Download.</p>
+    <div class="ui"><div class="row" style="justify-content:space-between"><span>Dolomiti</span><span style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden"><b style="background:var(--accent);color:#1a1200;padding:4px 9px">MKV</b><span style="padding:4px 9px;color:var(--muted)">MP4</span></span></div><span class="btn primary">Scarica</span></div></div>
+</div>
+</body></html>

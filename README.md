@@ -1,6 +1,6 @@
-# ⚡ Flux Capacitor
+# Fluxy
 
-> "1.21 gigabytes?!"
+> Tre flussi, un file.
 
 Estensione per browser Chromium e Firefox (testata su **Brave Origin 157** e **Firefox 160**) che rileva gli stream **HLS**
 e **DASH** caricati dalle pagine, ti fa scegliere qualità video, tracce audio e sottotitoli, e li salva in **un unico
@@ -10,7 +10,7 @@ MKV o MP4 senza ricodifica**.
 
 | | **Tutto nel browser** (predefinito) | **App locale** |
 |---|---|---|
-| Da installare | niente | `flux_host.py` + ffmpeg + yt-dlp (pulsante *Installa app locale*) |
+| Da installare | niente | `fluxy_host.py` + ffmpeg + yt-dlp (pulsante *Installa app locale*) |
 | Formati | HLS (anche AES-128, audio "packed" AAC/AC3/E-AC3, `EXT-X-BYTERANGE`) | HLS e DASH |
 | Unione | [Mediabunny](https://mediabunny.dev) (MPL-2.0), copia dei pacchetti | `ffmpeg -c copy` |
 | Dove salva | cartella Download del browser | cartella a scelta |
@@ -25,7 +25,7 @@ extension/
   background.js   rileva .m3u8/.mpd + header della pagina (Referer, Origin, Cookie…), analizza gli HLS,
                   smista i download al motore scelto, salva con l'API downloads
   engine/         motore nel browser
-    hls.js          analisi master/media playlist (stesso formato di flux_host.py)
+    hls.js          analisi master/media playlist (stesso formato di fluxy_host.py)
     net.js          fetch con nuovi tentativi e limite di connessioni condiviso
     engine.js       segmenti → OPFS (AES-128 via WebCrypto), sottotitoli WebVTT, unione con Mediabunny
     runner.js       un job: download → unione → file pronto da salvare; pulizia di OPFS
@@ -33,8 +33,8 @@ extension/
                   Firefox: runner.js gira nella pagina di background, tenuta sveglia durante i download
   popup.*         scelta flussi, coda download, impostazioni, installazione dell'app locale
 host/
-  flux_host.py    app locale (native messaging, solo stdlib): analisi DASH (yt-dlp), download con yt-dlp,
-                  unione con ffmpeg; `flux_host.py doctor` dice cosa manca e come installarlo
+  fluxy_host.py    app locale (native messaging, solo stdlib): analisi DASH (yt-dlp), download con yt-dlp,
+                  unione con ffmpeg; `fluxy_host.py doctor` dice cosa manca e come installarlo
   install.sh      registra l'app nei browser e propone di installare ffmpeg/yt-dlp (Linux e macOS)
 ```
 
@@ -51,13 +51,31 @@ Genera in `dist/`:
 
 | Browser | Cartella non pacchettizzata | Archivio |
 |---|---|---|
-| Brave, Chrome, Chromium, Edge, Vivaldi… | `dist/chromium/` | `flux-capacitor-<ver>-chromium.zip` |
-| Firefox, LibreWolf, Waterfox | `dist/firefox/` | `flux-capacitor-<ver>-firefox.xpi` |
+| Brave, Chrome, Chromium, Edge, Vivaldi… | `dist/chromium/` | `fluxy-<ver>-chromium.zip` |
+| Firefox, LibreWolf, Waterfox | `dist/firefox/` | `fluxy-<ver>-firefox.xpi` |
 
 `extension/` è il sorgente (manifest Chromium) e si può caricare anche direttamente dopo aver lanciato `./build.py`
 almeno una volta: la build copia l'app locale in `extension/native/`, da cui il pulsante *Installa app locale* genera
 l'installer. Per Firefox cambia solo il manifest: background come *event page*, niente `offscreen` e `key`,
-ID `flux-capacitor@fluxcapacitor.local`.
+ID `fluxy@fluxy-downloader.addon`.
+
+## Release
+
+A ogni push su `main` il workflow `.github/workflows/release.yml` legge `version` da `extension/manifest.json`: se la
+release `vX.Y.Z` non esiste ancora, esegue `build.py` e la pubblica con i pacchetti, l'app locale
+(`fluxy_host.py`, `install.sh`) e le istruzioni d'installazione di `docs/release-notes.md`. Per una nuova release basta
+aumentare la versione nel manifest; si può anche avviare a mano da *Actions → Build e release*.
+
+Firefox installa in modo permanente solo pacchetti firmati da Mozilla: aggiungendo ai *secrets* del repository
+`AMO_JWT_ISSUER` e `AMO_JWT_SECRET` (chiavi API di addons.mozilla.org) il workflow firma l'`.xpi` come estensione
+"non in elenco". Chromium non installa `.crx` fuori dal Web Store: lo zip si carica in modalità sviluppatore.
+
+## Store
+
+Testi della scheda (IT/EN), giustificazione dei permessi, note per i revisori e checklist: `docs/store/listing.md`.
+Informativa privacy: `docs/PRIVACY.md`. Immagini (screenshot 1280×800 e riquadri promozionali) in
+`docs/store/images/`, generate dai sorgenti HTML in `docs/store/src/` con `node docs/store/render.mjs`.
+I video di YouTube sono esclusi dal rilevamento, come richiede la policy del Chrome Web Store.
 
 ## Installazione
 
@@ -70,12 +88,12 @@ ID `flux-capacitor@fluxcapacitor.local`.
      Firefox Developer Edition/Nightly con `xpinstall.signatures.required = false`.
 2. Fine: il motore nel browser non richiede altro.
 3. Facoltativo, per DASH o per salvare con ffmpeg in una cartella a scelta: ⚙ → *App locale* → **Installa app locale**.
-   L'estensione salva in Download `flux-capacitor-install.sh` (contiene l'app e l'ID di questa estensione) e mostra il
+   L'estensione salva in Download `fluxy-install.sh` (contiene l'app e l'ID di questa estensione) e mostra il
    comando da lanciare:
    ```bash
-   bash ~/Downloads/flux-capacitor-install.sh            # rimozione: … --uninstall
+   bash ~/Downloads/fluxy-install.sh            # rimozione: … --uninstall
    ```
-   Copia l'app in `~/.local/share/flux-capacitor/` (macOS: `~/Library/Application Support/flux-capacitor/`), la
+   Copia l'app in `~/.local/share/fluxy/` (macOS: `~/Library/Application Support/fluxy/`), la
    registra nei browser trovati e, se mancano ffmpeg/yt-dlp/pycryptodomex, propone il comando giusto per il sistema
    (pacman, apt, dnf, zypper, apk, nix, brew; pipx/pip se yt-dlp viene da lì). Poi *verifica* nel popup.
    Dal repository si può usare direttamente `./host/install.sh`.
@@ -108,10 +126,10 @@ dell'host contiene il percorso assoluto). Per rimuovere: `./host/install.sh --un
 
 ## Debug
 
-- Analisi da terminale: `./host/flux_host.py probe "<url.m3u8>" "Referer: https://…"`
-- Log del programma locale: `~/.cache/flux-capacitor/host.log` (cookie e Authorization oscurati)
+- Analisi da terminale: `./host/fluxy_host.py probe "<url.m3u8>" "Referer: https://…"`
+- Log del programma locale: `~/.cache/fluxy/host.log` (cookie e Authorization oscurati)
 - Popup come pagina normale: `chrome-extension://kipokjinmlcebonicoplnakgedbnlgjo/popup.html?tab=<tabId>`
-- Console del service worker: `brave://extensions` → Flux Capacitor → *service worker*; motore nel browser:
+- Console del service worker: `brave://extensions` → Fluxy → *service worker*; motore nel browser:
   *offscreen.html* nella stessa pagina. Firefox: `about:debugging` → *Ispeziona*.
 
 ## Sistemi supportati

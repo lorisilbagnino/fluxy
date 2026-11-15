@@ -1,4 +1,4 @@
-// Flux Capacitor — in-browser download engine.
+// Fluxy — in-browser download engine.
 // Downloads HLS renditions with fetch (parallel, AES-128 via WebCrypto), stages
 // them in OPFS, then remuxes them with Mediabunny (packet copy, no re-encode)
 // into one MKV/MP4 written back to OPFS.

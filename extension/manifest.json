@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Flux Capacitor",
-  "short_name": "Flux",
-  "version": "0.2.0",
-  "description": "Trova gli stream HLS/DASH della pagina e li salva in un unico MKV/MP4 con le tracce audio e i sottotitoli che scegli. Senza ricodifica, senza installare nulla.",
+  "name": "Fluxy – Stream Downloader",
+  "short_name": "Fluxy",
+  "version": "0.3.0",
+  "description": "Salva gli stream HLS/DASH in un unico MKV/MP4 con le tracce audio e i sottotitoli che scegli. Senza ricodifica, senza installare nulla.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApnJsRnvlQOC/jS6aPFxwHdV2ACToCq6dpYSTlXo0e78JosdegWsJOKX7o3BNHl1TYXmyacY4D8OVylf+Xe+PLimHZL1OnQqgqFLOAJiDDlU1Kl6x3sU6bqXb3hS5kuiMDmr4eWxdz8BLk/2uW54Ppp4ngmW+rGEpZj6lv4m1pyKS2gZXbBg2MzyHQoBwYAFU2irZ/s9QkmnyQXanOZfmd5U7SgqgThxhjTc0/ts/IJuzv6nBqnBj+kT5miIse9JqrK2YN4sQ44E8StxIs/Wtke2rglAnaouaHW1hmBevoLphzywGSO1yPPcJWQlA0/nbDGeUMytsQxmKt816EPF1TwIDAQAB",
   "minimum_chrome_version": "116",
   "permissions": [
@@ -25,7 +25,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Flux Capacitor",
+    "default_title": "Fluxy",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",

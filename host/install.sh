@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# Registers the Flux Capacitor native messaging host for Chromium- and Firefox-based browsers
+# Registers the Fluxy native messaging host for Chromium- and Firefox-based browsers
 # and offers to install its dependencies (ffmpeg, yt-dlp).
 #   ./install.sh [extension-id]       ./install.sh --uninstall
 # The extension can also generate a self-contained copy of this script (⚙ → Motore → Installa):
 # it sets FLUX_HOST_PATH / FLUX_EXT_ID / FLUX_GECKO_ID before this code runs.
 set -euo pipefail
 
-NAME="com.fluxcapacitor.host"
+NAME="com.fluxy.host"
+LEGACY_NAMES=("com.fluxcapacitor.host")   # earlier name of the project: removed on install/uninstall
 ARG="${1:-}"
 [[ "$ARG" == --* ]] && ARG=""
 EXT_ID="${ARG:-${FLUX_EXT_ID:-kipokjinmlcebonicoplnakgedbnlgjo}}"   # Chromium: fixed by the "key" in manifest.json
-GECKO_ID="${FLUX_GECKO_ID:-flux-capacitor@fluxcapacitor.local}"    # Firefox: browser_specific_settings.gecko.id
-HOST_PATH="${FLUX_HOST_PATH:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/flux_host.py}"
+GECKO_ID="${FLUX_GECKO_ID:-fluxy@fluxy-downloader.addon}"    # Firefox: browser_specific_settings.gecko.id
+HOST_PATH="${FLUX_HOST_PATH:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fluxy_host.py}"
 
 if [[ "$(uname -s)" == Darwin ]]; then
   APP="$HOME/Library/Application Support"
@@ -42,9 +43,16 @@ else
   )
 fi
 
+remove_manifests() {
+  for n in "$@"; do
+    for d in "${DIRS[@]}"; do rm -f "$d/NativeMessagingHosts/$n.json"; done
+    for e in "${FF_DIRS[@]}"; do rm -f "${e%%|*}/$n.json"; done
+  done
+}
+remove_manifests "${LEGACY_NAMES[@]}"
+
 if [[ "${1:-}" == "--uninstall" ]]; then
-  for d in "${DIRS[@]}"; do rm -f "$d/NativeMessagingHosts/$NAME.json"; done
-  for e in "${FF_DIRS[@]}"; do rm -f "${e%%|*}/$NAME.json"; done
+  remove_manifests "$NAME"
   [[ -n "${FLUX_DEST:-}" ]] && rm -rf "$FLUX_DEST"
   echo "App locale rimossa."
   exit 0
@@ -89,7 +97,7 @@ manifest() {  # manifest <file> <"allowed_origins"|"allowed_extensions"> <value>
 import json, sys
 path, key, value, host, name = sys.argv[1:6]
 with open(path, "w", encoding="utf-8") as fh:
-    json.dump({"name": name, "description": "Flux Capacitor native host", "path": host,
+    json.dump({"name": name, "description": "Fluxy native host", "path": host,
                "type": "stdio", key: [value]}, fh, indent=2)
 PYEOF
 }
@@ -119,4 +127,4 @@ done
 echo
 echo "Fatto. Programma: $HOST_PATH"
 echo "Estensioni autorizzate: chrome-extension://$EXT_ID (Chromium), $GECKO_ID (Firefox)"
-echo "Torna al popup di Flux Capacitor e premi “Verifica”."
+echo "Torna al popup di Fluxy e premi “verifica”."

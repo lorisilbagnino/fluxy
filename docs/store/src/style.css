@@ -1,0 +1,23 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+:root {
+  --bg1: #0d1016; --bg2: #19202c; --text: #eef1f6; --muted: #98a3b6; --accent: #ffb020; --accent2: #ff8a00;
+  --video: #ffb020; --audio: #4fd1c5; --subs: #a78bfa; --card: #1b2130; --border: #2c3445;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
+body {
+  font-family: Inter, "Noto Sans", system-ui, sans-serif; color: var(--text);
+  background: radial-gradient(1200px 700px at 85% 15%, #2a2416 0%, transparent 60%),
+              radial-gradient(900px 600px at 0% 100%, #142233 0%, transparent 60%),
+              linear-gradient(160deg, var(--bg2), var(--bg1));
+}
+.brand { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 22px; }
+.brand img { width: 40px; height: 40px; }
+h1 { font-size: 52px; line-height: 1.08; font-weight: 800; letter-spacing: -1.2px; }
+h1 em { font-style: normal; color: var(--accent); }
+.lead { font-size: 21px; line-height: 1.5; color: var(--muted); }
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px; background: #ffffff0d; border: 1px solid var(--border); font-size: 15px; color: var(--text); }
+.chip i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.shadow { box-shadow: 0 30px 80px #0009, 0 0 0 1px #ffffff14; }
+.popup { border-radius: 14px; overflow: hidden; }
+.popup img { display: block; width: 100%; }

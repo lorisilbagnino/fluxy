@@ -1,5 +1,5 @@
 // HLS playlist parsing and stream analysis (no Mediabunny: runs in the
-// background worker too). Mirrors probe_hls() in host/flux_host.py: the result
+// background worker too). Mirrors probe_hls() in host/fluxy_host.py: the result
 // has the same shape whichever engine downloads it.
 
 import { fetchText } from './net.js';
