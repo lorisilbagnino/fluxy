@@ -11,6 +11,10 @@ Pacchetti da caricare (`./build.py`, oppure dalla release GitHub; il link Ko-fi 
 | Chrome Web Store, Edge Add-ons | `dist/fluxy-<ver>-chrome-store.zip` (senza `key`: l'ID lo assegna lo store; senza YouTube) |
 | AMO | `dist/fluxy-<ver>-firefox-store.xpi` (senza YouTube) |
 
+**Non menzionare il supporto YouTube della versione GitHub** in schede, screenshot o note: per il Chrome Web Store
+indicare dove ottenere una funzione vietata equivale a offrirla (rischio di rifiuto o rimozione). Nella scheda c'è
+solo il link neutro al progetto; la differenza tra le versioni è spiegata nel README.
+
 Le versioni store escludono YouTube (obbligatorio per il Chrome Web Store, prudente per AMO); la versione pubblicata
 su GitHub lo supporta tramite l'app locale.
 
@@ -71,6 +75,9 @@ Cosa Fluxy non fa
 
 Usa Fluxy solo per contenuti che hai il diritto di salvare.
 
+Open source (GPL-3.0): codice, documentazione e release su https://github.com/lorisilbagnino/fluxy
+Realizzato con Mediabunny; l'app locale facoltativa usa FFmpeg e yt-dlp.
+
 Fluxy è gratuito. Se ti è utile, puoi offrirmi un caffè: https://ko-fi.com/lorisilbagnino
 ```
 
@@ -118,6 +125,9 @@ What Fluxy doesn't do
 • It doesn't re-encode or alter content.
 
 Only use Fluxy for content you have the right to save.
+
+Open source (GPL-3.0): code, documentation and releases at https://github.com/lorisilbagnino/fluxy
+Built with Mediabunny; the optional local app uses FFmpeg and yt-dlp.
 
 Fluxy is free. If you find it useful, you can buy me a coffee: https://ko-fi.com/lorisilbagnino
 ```

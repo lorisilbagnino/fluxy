@@ -117,6 +117,13 @@ previsti dalla sezione 7:
 Mediabunny (`extension/engine/mediabunny.min.mjs`) mantiene la sua licenza, MPL-2.0. I contributi inviati come pull
 request sono accettati con la stessa licenza.
 
+## Crediti
+
+Fluxy si basa su [Mediabunny](https://github.com/Vanilagy/mediabunny) (MPL-2.0, incluso); l'app locale facoltativa usa
+[FFmpeg](https://ffmpeg.org), [yt-dlp](https://github.com/yt-dlp/yt-dlp), PyCryptodome e Python, installati
+dall'utente. Dettagli e licenze: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Ogni pacchetto contiene anche
+`LICENSE`, `ADDITIONAL-TERMS.md` e quel file.
+
 ## Sostieni Fluxy
 
 Fluxy è gratuito. Se ti è utile puoi sostenerlo con una donazione spontanea:

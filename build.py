@@ -30,6 +30,7 @@ SRC = ROOT / "extension"
 DIST = ROOT / "dist"
 GECKO_ID = "fluxy@fluxy-downloader.addon"   # must match host/install.sh
 SKIP = {".DS_Store"}
+LEGAL = ["LICENSE", "ADDITIONAL-TERMS.md", "THIRD-PARTY-NOTICES.md"]   # shipped in every package
 NATIVE = [ROOT / "host" / "fluxy_host.py", ROOT / "host" / "install.sh"]   # bundled for the installer button
 
 
@@ -84,6 +85,8 @@ def build(target: str, transform, store: bool = False) -> Path:
     manifest = transform(json.loads((SRC / "manifest.json").read_text(encoding="utf-8")))
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (out / "build-flags.js").write_text(build_flags(store), encoding="utf-8")
+    for name in LEGAL:   # GPL §4: every copy carries the license; MPL §3.2: where Mediabunny's source is
+        shutil.copy2(ROOT / name, out / name)
     return out
 
 
