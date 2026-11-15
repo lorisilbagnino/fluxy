@@ -7,6 +7,10 @@
 set -euo pipefail
 
 NAME="com.fluxy.host"
+
+# Messages in Italian when the system language is Italian, English otherwise.
+case "${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}" in it*) IT=1 ;; *) IT=0 ;; esac
+say() { if [[ $IT == 1 ]]; then echo "$2"; else echo "$1"; fi; }   # say "english" "italiano"
 LEGACY_NAMES=("com.fluxcapacitor.host")   # earlier name of the project: removed on install/uninstall
 ARG="${1:-}"
 [[ "$ARG" == --* ]] && ARG=""
@@ -54,17 +58,17 @@ remove_manifests "${LEGACY_NAMES[@]}"
 if [[ "${1:-}" == "--uninstall" ]]; then
   remove_manifests "$NAME"
   [[ -n "${FLUX_DEST:-}" ]] && rm -rf "$FLUX_DEST"
-  echo "App locale rimossa."
+  say "Local app removed." "App locale rimossa."
   exit 0
 fi
 
-command -v python3 >/dev/null || { echo "Serve python3: installalo con il gestore pacchetti del sistema e riesegui."; exit 1; }
+command -v python3 >/dev/null || { say "python3 is required: install it with your package manager and run this again." "Serve python3: installalo con il gestore pacchetti del sistema e riesegui."; exit 1; }
 chmod +x "$HOST_PATH"
 
 # ---- dependencies --------------------------------------------------------
 ask() {  # ask "question" -> 0 if yes (default yes); never asks without a terminal
   [[ -t 0 ]] || return 1
-  local r; read -r -p "$1 [S/n] " r; [[ -z "$r" || "$r" =~ ^[sSyY] ]]
+  local r; read -r -p "$1 [$( [[ $IT == 1 ]] && echo S/n || echo Y/n )] " r; [[ -z "$r" || "$r" =~ ^[sSyY] ]]
 }
 runnable() { [[ "$1" =~ ^(sudo|brew|nix-env|pipx|python3|winget)\  ]]; }
 doctor_field() { python3 -c 'import json,sys; v=json.load(sys.stdin).get(sys.argv[1]); print(" ".join(v) if isinstance(v,list) else (v or ""))' "$1"; }
@@ -73,21 +77,21 @@ report="$(python3 "$HOST_PATH" doctor)"
 missing="$(doctor_field missing <<< "$report")"
 if [[ -n "$missing" ]]; then
   cmd="$(doctor_field tools <<< "$report")"
-  echo "Mancano: $missing"
-  if runnable "$cmd" && ask "Li installo ora con: $cmd ?"; then
-    eval "$cmd" || echo "Installazione non riuscita: installali a mano e riavvia il browser."
+  say "Missing: $missing" "Mancano: $missing"
+  if runnable "$cmd" && ask "$(say "Install them now with: $cmd ?" "Li installo ora con: $cmd ?")"; then
+    eval "$cmd" || say "Installation failed: install them manually and restart the browser." "Installazione non riuscita: installali a mano e riavvia il browser."
     report="$(python3 "$HOST_PATH" doctor)"
   else
-    echo "Per installarli: $cmd"
+    say "To install them: $cmd" "Per installarli: $cmd"
   fi
 fi
 crypto="$(doctor_field cryptodome <<< "$report")"
 if [[ -n "$crypto" ]]; then
-  echo "yt-dlp non trova pycryptodomex: gli stream cifrati verranno scaricati più lentamente."
-  if runnable "$crypto" && ask "Lo installo ora con: $crypto ?"; then
-    eval "$crypto" || echo "Installazione non riuscita."
+  say "yt-dlp can't find pycryptodomex: encrypted streams will download more slowly." "yt-dlp non trova pycryptodomex: gli stream cifrati verranno scaricati più lentamente."
+  if runnable "$crypto" && ask "$(say "Install it now with: $crypto ?" "Lo installo ora con: $crypto ?")"; then
+    eval "$crypto" || say "Installation failed." "Installazione non riuscita."
   else
-    echo "Per installarlo: $crypto"
+    say "To install it: $crypto" "Per installarlo: $crypto"
   fi
 fi
 
@@ -123,8 +127,8 @@ for e in "${FF_DIRS[@]}"; do
   installed=1
 done
 
-[[ $installed == 1 ]] || { echo "Nessun browser compatibile trovato."; exit 1; }
+[[ $installed == 1 ]] || { say "No compatible browser found." "Nessun browser compatibile trovato."; exit 1; }
 echo
-echo "Fatto. Programma: $HOST_PATH"
-echo "Estensioni autorizzate: chrome-extension://$EXT_ID (Chromium), $GECKO_ID (Firefox)"
-echo "Torna al popup di Fluxy e premi “verifica”."
+say "Done. Program: $HOST_PATH" "Fatto. Programma: $HOST_PATH"
+say "Allowed extensions: chrome-extension://$EXT_ID (Chromium), $GECKO_ID (Firefox)" "Estensioni autorizzate: chrome-extension://$EXT_ID (Chromium), $GECKO_ID (Firefox)"
+say "Go back to the Fluxy popup and press “verify”." "Torna al popup di Fluxy e premi “verifica”."

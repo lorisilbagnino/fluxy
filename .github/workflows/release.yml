@@ -26,6 +26,8 @@ jobs:
       # step-level env is not visible to a step's own `if`
       AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
       AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+      # repository variable, e.g. https://ko-fi.com/<name>: "Support Fluxy" link in the popup (empty = hidden)
+      DONATE_URL: ${{ vars.DONATE_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -76,5 +78,6 @@ jobs:
             "dist/fluxy-$v-chromium.zip" \
             "dist/fluxy-$v-firefox.xpi" \
             "dist/fluxy-$v-chrome-store.zip" \
+            "dist/fluxy-$v-firefox-store.xpi" \
             host/fluxy_host.py \
             host/install.sh

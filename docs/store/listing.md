@@ -4,14 +4,28 @@ Testi pronti da incollare per **Chrome Web Store** (vale anche per **Edge Add-on
 Prima la versione italiana, poi quella inglese: negli store conviene usare l'inglese come lingua predefinita e
 aggiungere l'italiano come traduzione.
 
-Pacchetti da caricare (`./build.py`):
+Pacchetti da caricare (`DONATE_URL=https://ko-fi.com/<nome> ./build.py`, oppure dalla release GitHub):
 
 | Store | File |
 |---|---|
-| Chrome Web Store, Edge Add-ons | `dist/fluxy-<ver>-chrome-store.zip` (senza `key`: l'ID lo assegna lo store) |
-| AMO | `dist/fluxy-<ver>-firefox.xpi` |
+| Chrome Web Store, Edge Add-ons | `dist/fluxy-<ver>-chrome-store.zip` (senza `key`: l'ID lo assegna lo store; senza YouTube) |
+| AMO | `dist/fluxy-<ver>-firefox-store.xpi` (senza YouTube) |
 
-Immagini: `docs/store/images/` (vedi in fondo).
+Le versioni store escludono YouTube (obbligatorio per il Chrome Web Store, prudente per AMO); la versione pubblicata
+su GitHub lo supporta tramite l'app locale.
+
+**Lingue**: l'estensione è in inglese (predefinita) e italiano; nome e descrizione del manifest vengono presi da
+`_locales/`. In entrambi gli store scegliere **inglese come lingua predefinita** e aggiungere l'italiano, ognuno con
+la sua descrizione e i suoi screenshot (`images/en/`, `images/it/`).
+
+**Donazioni (Ko-fi)**: consentite da entrambi gli store se spontanee e non legate a funzioni.
+- AMO ha un campo apposito, *Contributions URL*, che accetta Ko-fi: compare come pulsante "Support this developer".
+- Chrome Web Store non ha un campo: si mette il link in fondo alla descrizione (riga già predisposta sotto) e
+  nell'estensione (link "Sostieni Fluxy" nelle impostazioni, attivo se la build ha `DONATE_URL`).
+- Nel testo sostituire `<KOFI_URL>` con l'indirizzo della pagina Ko-fi; se l'account non esiste ancora, togliere la
+  riga.
+
+Immagini: `docs/store/images/{en,it}/` (vedi in fondo).
 
 ---
 
@@ -56,6 +70,8 @@ Cosa Fluxy non fa
 • Non ricodifica e non modifica i contenuti.
 
 Usa Fluxy solo per contenuti che hai il diritto di salvare.
+
+Fluxy è gratuito. Se ti è utile, puoi offrirmi un caffè: <KOFI_URL>
 ```
 
 ---
@@ -101,16 +117,15 @@ What Fluxy doesn't do
 • It doesn't re-encode or alter content.
 
 Only use Fluxy for content you have the right to save.
-```
 
-> L'interfaccia dell'estensione oggi è solo in italiano. Se la scheda inglese è la predefinita, conviene tradurre
-> anche il popup (`_locales/`) prima della pubblicazione, oppure dichiarare l'italiano come unica lingua.
+Fluxy is free. If you find it useful, you can buy me a coffee: <KOFI_URL>
+```
 
 ---
 
 ## Chrome Web Store — campi della dashboard
 
-**Categoria**: Strumenti (Tools) · **Lingua**: Italiano (o Inglese, vedi nota sopra)
+**Categoria**: Strumenti (Tools) · **Lingua predefinita**: Inglese (+ Italiano)
 
 **Scopo unico** (Single purpose):
 > Fluxy saves the HLS/DASH video streams played by a web page as a single local video file, with the video,
@@ -148,6 +163,7 @@ nessuna raccolta dati, permessi limitati alla funzione.
 ## AMO — campi del Developer Hub
 
 **Categorie**: Download Management · Photos, Music & Videos
+**Contributions URL**: `<KOFI_URL>` (Ko-fi è tra i servizi accettati)
 **Licenza**: da scegliere (il repository non ne ha ancora una: es. MIT o MPL-2.0, compatibile con Mediabunny).
 **Informativa privacy**: il testo di `docs/PRIVACY.md`.
 
@@ -166,7 +182,7 @@ The optional native app (nativeMessaging, com.fluxy.host) is a Python script shi
 only if the user runs the generated install script; the extension works fully without it.
 
 Test: open any page that plays an HLS stream (e.g. https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8
-in a player page), open the popup, press "Rileva" (Detect), choose tracks, press "Scarica" (Download).
+in a player page), open the popup, press "Detect", choose tracks, press "Download" (the UI follows the browser language: English or Italian).
 ```
 
 ---
@@ -175,16 +191,20 @@ in a player page), open the popup, press "Rileva" (Detect), choose tracks, press
 
 | File | Formato | Uso |
 |---|---|---|
-| `images/screenshot-1-popup.png` | 1280×800 | CWS/AMO: popup con flussi selezionabili |
-| `images/screenshot-2-three-streams.png` | 1280×800 | CWS/AMO: infografica "tre flussi, un file" |
-| `images/screenshot-3-how-it-works.png` | 1280×800 | CWS/AMO: come funziona in 3 passi |
-| `images/screenshot-4-engines.png` | 1280×800 | CWS/AMO: motore nel browser o app locale |
-| `images/screenshot-5-progress.png` | 1280×800 | CWS/AMO: download in corso e completato |
-| `images/promo-small-440x280.png` | 440×280 | CWS: piccolo riquadro promozionale (obbligatorio) |
-| `images/promo-marquee-1400x560.png` | 1400×560 | CWS: riquadro grande (facoltativo) |
+Ogni immagine esiste in `images/en/` e `images/it/`:
+
+| File | Formato | Uso |
+|---|---|---|
+| `screenshot-1-popup.png` | 1280×800 | CWS/AMO: popup con flussi selezionabili |
+| `screenshot-2-three-streams.png` | 1280×800 | CWS/AMO: infografica "tre flussi, un file" |
+| `screenshot-3-how-it-works.png` | 1280×800 | CWS/AMO: come funziona in 3 passi |
+| `screenshot-4-engines.png` | 1280×800 | CWS/AMO: motore nel browser o app locale |
+| `screenshot-5-progress.png` | 1280×800 | CWS/AMO: download in corso e completato |
+| `promo-small-440x280.png` | 440×280 | CWS: piccolo riquadro promozionale (obbligatorio) |
+| `promo-marquee-1400x560.png` | 1400×560 | CWS: riquadro grande (facoltativo) |
 | `icons/icon128.png` (nell'estensione) | 128×128 | Icona dello store |
 
-I sorgenti HTML delle immagini sono in `docs/store/src/`; si rigenerano con `docs/store/render.sh`.
+I sorgenti HTML sono in `docs/store/src/` (testi in `src/strings.js`); si rigenerano con `node docs/store/render.mjs`.
 
 ---
 
@@ -194,5 +214,5 @@ I sorgenti HTML delle immagini sono in `docs/store/src/`; si rigenerano con `doc
 - [ ] Informativa privacy raggiungibile da un URL pubblico (il repository è privato: GitHub Pages su repo privati
       richiede un piano a pagamento; in alternativa un gist pubblico o una pagina sul proprio sito).
 - [ ] Licenza del progetto.
-- [ ] Decidere la lingua predefinita della scheda e, se inglese, tradurre l'interfaccia.
-- [ ] Caricare `fluxy-<ver>-chrome-store.zip` / `fluxy-<ver>-firefox.xpi`, testi, immagini, giustificazioni.
+- [ ] Aprire l'account Ko-fi, impostare la variabile `DONATE_URL` del repository e sostituire `<KOFI_URL>`.
+- [ ] Caricare `fluxy-<ver>-chrome-store.zip` / `fluxy-<ver>-firefox-store.xpi`, testi, immagini, giustificazioni.

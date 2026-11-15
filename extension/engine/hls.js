@@ -3,6 +3,7 @@
 // has the same shape whichever engine downloads it.
 
 import { fetchText } from './net.js';
+import { m } from './i18n.js';
 
 export const attrs = (s) => Object.fromEntries(
   [...s.matchAll(/([A-Z0-9-]+)=("[^"]*"|[^,]*)/g)].map((m) => [m[1], m[2].replace(/^"|"$/g, '')]));
@@ -28,7 +29,7 @@ export function parseMediaPlaylist(text, base) {
       const fmt = (a.KEYFORMAT || 'identity').toLowerCase();
       if (method === 'NONE') key = null;
       else if (method === 'AES-128' && fmt === 'identity') key = { uri: abs(a.URI, base), iv: a.IV || null };
-      else throw new Error(`Cifratura non supportata: ${method} ${fmt}`);
+      else throw new Error(m('eng_unsupportedEnc', `${method} ${fmt}`));
     } else if (line.startsWith('#EXT-X-MAP:')) {
       const a = attrs(line.slice(11));
       map = abs(a.URI, base);
@@ -96,7 +97,7 @@ const AUDIO_EXT_RE = /\.(aac|ac3|ec3|eac3|mp3|m4a|opus)(?:[?#]|$)/i;
 export async function probeHls(url, { get = fetchText, fetchOpts, onHosts } = {}) {
   const load = async (u) => { await onHosts?.([u]); return get(u, fetchOpts); };
   const text = await load(url);
-  if (!text.trimStart().startsWith('#EXTM3U')) throw new Error('Il file non sembra una playlist HLS');
+  if (!text.trimStart().startsWith('#EXTM3U')) throw new Error(m('eng_notHls'));
 
   if (!text.includes('#EXT-X-STREAM-INF')) {
     // A media playlist on its own

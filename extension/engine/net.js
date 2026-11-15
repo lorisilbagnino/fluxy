@@ -1,5 +1,7 @@
 // Network helpers shared by the probe (background) and the download engine.
 
+import { m } from './i18n.js';
+
 // One connection budget shared by every track of every job: servers tend to
 // reset connections when a client opens dozens at once.
 let maxConn = 8;
@@ -21,7 +23,7 @@ async function withSlot(fn) {
 }
 
 export class CancelledError extends Error {
-  constructor() { super('Annullato'); this.name = 'CancelledError'; }
+  constructor() { super(m('eng_cancelled')); this.name = 'CancelledError'; }
 }
 
 const sleep = (ms, signal) => new Promise((resolve, reject) => {
@@ -45,8 +47,8 @@ export async function fetchBytes(url, opts = {}, tries = 6) {
       const fatal = e.status && e.status < 500 && e.status !== 429 && e.status !== 408;
       if (fatal || i >= tries) {
         const host = (() => { try { return new URL(url).hostname; } catch { return url; } })();
-        const hint = e.status === 403 || e.status === 401 ? ' — il server rifiuta la richiesta: riapri la pagina e premi Rileva per aggiornare i permessi' : '';
-        throw new Error(`${e.message} da ${host}${hint}`);
+        const hint = e.status === 403 || e.status === 401 ? m('eng_httpDenied') : '';
+        throw new Error(m('eng_http', e.message, host) + hint);
       }
       console.warn('[flux] retry', i + 1, url, e.message);
       await sleep(400 * 2 ** i, opts.signal);

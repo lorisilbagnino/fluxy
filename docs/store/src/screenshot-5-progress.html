@@ -1,4 +1,4 @@
-<!doctype html><html lang="it"><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
 <style>
   .wrap { display: grid; grid-template-columns: 1fr 400px; gap: 60px; padding: 64px 80px; height: 100%; }
   .copy { display: flex; flex-direction: column; gap: 24px; padding-top: 20px; }
@@ -10,13 +10,13 @@
 <div class="wrap">
   <div class="copy">
     <div class="brand"><img src="assets/icon.svg">Fluxy</div>
-    <h1>Veloce, <em>senza perdere qualità</em>.</h1>
+    <h1 data-t="s5_h1"></h1>
     <div class="facts">
-      <div class="fact"><i>⇉</i><div><b>Segmenti in parallelo</b>, con nuovi tentativi automatici se la connessione cade.</div></div>
-      <div class="fact"><i>≡</i><div><b>Copia, non ricodifica</b>: l'unione di un film richiede secondi e il file resta identico all'originale.</div></div>
-      <div class="fact"><i>✓</i><div><b>Lingue e tracce predefinite già impostate</b>: il file si apre pronto in qualsiasi player.</div></div>
-      <div class="fact"><i>⊘</i><div><b>Nessun tracciamento</b>: niente account, niente statistiche, nessun server di Fluxy.</div></div>
+      <div class="fact"><i>⇉</i><div data-t="s5_f1"></div></div>
+      <div class="fact"><i>≡</i><div data-t="s5_f2"></div></div>
+      <div class="fact"><i>✓</i><div data-t="s5_f3"></div></div>
+      <div class="fact"><i>⊘</i><div data-t="s5_f4"></div></div>
     </div>
   </div>
-  <div class="popup shadow"><img src="assets/popup-jobs.png"></div>
-</div></body></html>
+  <div class="popup shadow"><img data-img="assets/popup-jobs-{lang}.png"></div>
+</div><script src="strings.js"></script></body></html>

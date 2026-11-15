@@ -1,4 +1,4 @@
-<!doctype html><html lang="it"><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
 <style>
   .wrap { display: grid; grid-template-columns: 1fr 400px; gap: 60px; padding: 64px 80px; height: 100%; }
   .copy { display: flex; flex-direction: column; gap: 22px; }
@@ -12,12 +12,12 @@
 <div class="wrap">
   <div class="copy">
     <div class="brand"><img src="assets/icon.svg">Fluxy</div>
-    <h1>Tutto nel browser.<br><em>O con l'app locale.</em></h1>
-    <p class="lead">Di base Fluxy scarica e unisce tutto dentro l'estensione. Se ti serve di più, un clic prepara l'installazione di ffmpeg e yt-dlp.</p>
+    <h1 data-t="s4_h1"></h1>
+    <p class="lead" data-t="s4_lead"></p>
     <div class="cards">
-      <div class="card on"><span class="tag">predefinito</span><h2>Nel browser</h2><ul><li>Niente da installare</li><li>HLS, anche cifrato AES-128</li><li>MKV o MP4 in Download</li><li>Nessun dato inviato a server esterni</li></ul></div>
-      <div class="card"><span class="tag" style="background:#ffffff10;color:var(--muted)">facoltativa</span><h2>App locale</h2><ul><li>Anche DASH</li><li>Cartella di destinazione a scelta</li><li>Unione con ffmpeg</li><li>Installer per Linux in un clic</li></ul></div>
+      <div class="card on"><span class="tag" data-t="s4_tag1"></span><h2 data-t="s4_h1a"></h2><ul data-t="s4_l1"></ul></div>
+      <div class="card"><span class="tag" style="background:#ffffff10;color:var(--muted)" data-t="s4_tag2"></span><h2 data-t="s4_h1b"></h2><ul data-t="s4_l2"></ul></div>
     </div>
   </div>
-  <div class="popup shadow"><img src="assets/popup-settings.png"></div>
-</div></body></html>
+  <div class="popup shadow"><img data-img="assets/popup-settings-{lang}.png"></div>
+</div><script src="strings.js"></script></body></html>

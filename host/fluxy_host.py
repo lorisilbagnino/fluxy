@@ -27,7 +27,7 @@ import traceback
 import urllib.parse
 import urllib.request
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 CACHE_DIR = os.path.join(os.path.expanduser("~/.cache"), "fluxy")
 LOG_FILE = os.path.join(CACHE_DIR, "host.log")
 UA_FALLBACK = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -89,6 +89,37 @@ LANG_2_TO_3 = {
     "eu": "baq", "gl": "glg", "et": "est", "lv": "lav", "lt": "lit", "fa": "per",
     "ta": "tam", "te": "tel", "bn": "ben", "ur": "urd", "fil": "fil", "tl": "tgl",
 }
+
+
+# --------------------------------------------------------------------------
+# Messages shown in the extension: English, plus Italian
+# --------------------------------------------------------------------------
+UI_LANG = "en"
+TEXT = {
+    "it": {
+        "Starting": "Avvio",
+        "Completed": "Completato",
+        "Cancelled": "Annullato",
+        "Error": "Errore",
+        "Download {label} ({i}/{n})": "Download {label} ({i}/{n})",
+        "Subtitles {lang} ({i}/{n})": "Sottotitoli {lang} ({i}/{n})",
+        "Merging into one file": "Unione in un unico file",
+        "{label} file not found after the download": "File {label} non trovato dopo il download",
+        "{lang} subtitles not downloaded": "Sottotitoli {lang} non scaricati",
+        "{lang} subtitles are empty": "Sottotitoli {lang} vuoti",
+        "The file doesn't look like an HLS playlist or a DASH manifest": "Il file non sembra una playlist HLS o un manifest DASH",
+        "install ffmpeg and yt-dlp with your distribution's package manager": "installa ffmpeg e yt-dlp con il gestore pacchetti della tua distribuzione",
+        "add python3Packages.pycryptodomex to yt-dlp's environment": "aggiungi python3Packages.pycryptodomex all'ambiente di yt-dlp",
+        "download the latest official executable from github.com/yt-dlp/yt-dlp/releases": "scarica l'eseguibile ufficiale aggiornato da github.com/yt-dlp/yt-dlp/releases",
+        "full ffmpeg: RPM Fusion repository": "ffmpeg completo: repository RPM Fusion",
+    },
+}
+
+
+def T(text: str, **kw) -> str:
+    """Translates an English message into the extension's UI language."""
+    out = TEXT.get(UI_LANG.split("-")[0].lower(), {}).get(text, text)
+    return out.format(**kw) if kw else out
 
 
 def lang3(code: str | None) -> str:
@@ -407,7 +438,8 @@ def info_cache_path(url: str) -> str:
     return os.path.join(CACHE_DIR, "probes", hashlib.sha1(url.encode()).hexdigest() + ".json")
 
 
-def probe_dash(url: str, headers: dict) -> dict:
+def probe_ytdlp(url: str, headers: dict, kind: str = "dash") -> dict:
+    """DASH manifests and whole pages (YouTube…): yt-dlp extracts the formats."""
     cmd = ["yt-dlp", "-J", "--no-warnings", "--no-playlist", *ytdlp_header_args(headers), url]
     p = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
     if p.returncode != 0:
@@ -444,21 +476,24 @@ def probe_dash(url: str, headers: dict) -> dict:
                      "default": False, "ytLang": lang,
                      "ext": entries[0].get("ext") if entries else None})
     return {
-        "kind": "dash", "master": True, "duration": info.get("duration"), "live": bool(info.get("is_live")),
+        "kind": kind, "extractor": info.get("extractor_key"),
+        "master": True, "duration": info.get("duration"), "live": bool(info.get("is_live")),
         "drm": drm, "encryption": None, "video": video, "audio": audio, "subs": subs,
         "childUrls": [], "title": info.get("title"),
     }
 
 
-def probe(url: str, headers: dict) -> dict:
+def probe(url: str, headers: dict, kind: str | None = None) -> dict:
     headers = clean_headers(headers)
+    if kind == "page":
+        return probe_ytdlp(url, headers, "page")
     text, final_url, ctype = http_get(url, headers)
     head = text.lstrip()[:2000]
     if head.startswith("#EXTM3U"):
         return probe_hls(url, headers, text, final_url)
     if "<MPD" in head or "dash+xml" in ctype:
-        return probe_dash(url, headers)
-    raise RuntimeError("Il file non sembra una playlist HLS o un manifest DASH")
+        return probe_ytdlp(url, headers)
+    raise RuntimeError(T("The file doesn't look like an HLS playlist or a DASH manifest"))
 
 
 # --------------------------------------------------------------------------
@@ -526,24 +561,24 @@ def install_hints(env: dict) -> dict:
             crypto, tools = "sudo apt install python3-pycryptodome", "sudo apt install ffmpeg yt-dlp"
         elif "fedora" in fam or "rhel" in fam:
             crypto = "sudo dnf install python3-pycryptodomex"
-            tools = "sudo dnf install ffmpeg yt-dlp   # ffmpeg completo: repository RPM Fusion"
+            tools = "sudo dnf install ffmpeg yt-dlp   # " + T("full ffmpeg: RPM Fusion repository")
         elif "suse" in fam:
             crypto, tools = "sudo zypper install python3-pycryptodomex", "sudo zypper install ffmpeg yt-dlp"
         elif "alpine" in fam:
             crypto, tools = "sudo apk add py3-pycryptodomex", "sudo apk add ffmpeg yt-dlp"
         elif "nixos" in fam:
-            crypto = "aggiungi python3Packages.pycryptodomex all'ambiente di yt-dlp"
+            crypto = T("add python3Packages.pycryptodomex to yt-dlp's environment")
             tools = "nix-env -iA nixpkgs.ffmpeg nixpkgs.yt-dlp"
         else:
             crypto = "python3 -m pip install pycryptodomex"
-            tools = "installa ffmpeg e yt-dlp con il gestore pacchetti della tua distribuzione"
+            tools = T("install ffmpeg and yt-dlp with your distribution's package manager")
     # yt-dlp not from the system package manager: fix it where it actually lives
     if "pipx" in path:
         crypto = "pipx inject yt-dlp pycryptodomex"
     elif variant == "pip" or "/.local/" in path or "site-packages" in path:
         crypto = 'python3 -m pip install -U "yt-dlp[default]"'
     elif "exe" in variant or variant == "zip":
-        crypto = "scarica l'eseguibile ufficiale aggiornato da github.com/yt-dlp/yt-dlp/releases"
+        crypto = T("download the latest official executable from github.com/yt-dlp/yt-dlp/releases")
     return {"cryptodome": crypto, "tools": tools}
 
 
@@ -625,12 +660,12 @@ class Job:
     def _main(self):
         try:
             out = self._work()
-            self.emit(force=True, state="done", progress=1, stage="Completato", output=out)
+            self.emit(force=True, state="done", progress=1, stage=T("Completed"), output=out)
         except Cancelled:
-            self.emit(force=True, state="cancelled", stage="Annullato")
+            self.emit(force=True, state="cancelled", stage=T("Cancelled"))
         except Exception as e:  # noqa: BLE001
             log("job error", traceback.format_exc())
-            self.emit(force=True, state="error", stage="Errore", error=str(e))
+            self.emit(force=True, state="error", stage=T("Error"), error=str(e))
         finally:
             if self.tmp and os.path.isdir(self.tmp) and not self.spec.get("keepTemp"):
                 shutil.rmtree(self.tmp, ignore_errors=True)
@@ -668,7 +703,7 @@ class Job:
         n = len(tracks)
         for i, (role, t) in enumerate(tracks):
             label = "video" if role == "video" else f"audio {t.get('lang') or ''}".strip()
-            stage = f"Download {label} ({i + 1}/{n})"
+            stage = T("Download {label} ({i}/{n})", label=label, i=i + 1, n=n)
             report(stage, 0, weights[i])
             prefix = os.path.join(self.tmp, f"t{i}")
 
@@ -707,20 +742,20 @@ class Job:
             if t.get("formatId"):
                 info_path = info_cache_path(s["url"])
                 if not os.path.exists(info_path):
-                    probe_dash(s["url"], headers)
+                    probe_ytdlp(s["url"], headers)
                 cmd += ["--load-info-json", info_path, "-f", t["formatId"]]
             else:
                 cmd += [t["url"]]
             self.run(cmd, on_line)
             found = [f for f in glob.glob(prefix + ".*") if not f.endswith((".json", ".part", ".ytdl"))]
             if not found:
-                raise RuntimeError(f"File {label} non trovato dopo il download")
+                raise RuntimeError(T("{label} file not found after the download", label=label))
             files.append((role, t, found[0]))
             done_w += weights[i]
 
         sub_files = []
         for j, sub in enumerate(subs):
-            stage = f"Sottotitoli {sub.get('lang') or ''} ({j + 1}/{len(subs)})"
+            stage = T("Subtitles {lang} ({i}/{n})", lang=sub.get("lang") or "", i=j + 1, n=len(subs))
             report(stage, 0, 20_000)
             dst = os.path.join(self.tmp, f"s{j}.srt")
             if sub.get("ytLang"):
@@ -731,14 +766,14 @@ class Job:
                           "-o", pfx + ".%(ext)s"])
                 got = glob.glob(pfx + "*.srt")
                 if not got:
-                    raise RuntimeError(f"Sottotitoli {sub.get('lang')} non scaricati")
+                    raise RuntimeError(T("{lang} subtitles not downloaded", lang=sub.get("lang")))
                 os.replace(got[0], dst)
             else:
                 self.run(["ffmpeg", "-nostdin", "-v", "error", "-y", *ffmpeg_header_args(headers),
                           "-extension_picky", "0", "-i", sub["url"], "-map", "0:s:0?",
                           "-c:s", "srt", dst])
                 if not os.path.exists(dst) or os.path.getsize(dst) == 0:
-                    raise RuntimeError(f"Sottotitoli {sub.get('lang')} vuoti")
+                    raise RuntimeError(T("{lang} subtitles are empty", lang=sub.get("lang")))
             sub_files.append((sub, dst))
             done_w += 20_000
 
@@ -787,9 +822,9 @@ class Job:
         def on_mux(line):
             if line.startswith("out_time_us=") and duration:
                 us = int(line.split("=", 1)[1] or 0)
-                report("Unione in un unico file", min(1, us / 1e6 / duration), mux_weight)
+                report(T("Merging into one file"), min(1, us / 1e6 / duration), mux_weight)
 
-        report("Unione in un unico file", 0, mux_weight)
+        report(T("Merging into one file"), 0, mux_weight)
         self.run(cmd, on_mux)
         os.replace(tmp_out, final)
         return final
@@ -809,6 +844,8 @@ def tool_version(name, args):
 
 
 def handle(msg: dict):
+    global UI_LANG
+    UI_LANG = msg.get("lang") or UI_LANG
     t = msg.get("type")
     rid = msg.get("id")
     if t == "hello":
@@ -821,7 +858,7 @@ def handle(msg: dict):
     elif t == "probe":
         def work():
             try:
-                data = probe(msg["url"], msg.get("headers") or {})
+                data = probe(msg["url"], msg.get("headers") or {}, msg.get("kind"))
                 send({"type": "probe", "id": rid, "ok": True, "data": data})
             except Exception as e:  # noqa: BLE001
                 log("probe error", msg.get("url"), traceback.format_exc())
@@ -830,7 +867,7 @@ def handle(msg: dict):
     elif t == "download":
         job = Job(msg["jobId"], msg["spec"])
         JOBS[job.id] = job
-        job.emit(force=True, state="running", progress=0, stage="Avvio")
+        job.emit(force=True, state="running", progress=0, stage=T("Starting"))
         job.start()
     elif t == "cancel":
         job = JOBS.get(msg.get("jobId"))

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Renders docs/store/src/*.html to docs/store/images/*.png with a headless Chromium browser (DevTools protocol).
-// Size comes from the file name (…-WxH.html), default 1280×800.   Usage: node docs/store/render.mjs [name-filter]
+// Renders docs/store/src/*.html to docs/store/images/<lang>/*.png (en, it) with a headless Chromium browser
+// (DevTools protocol). Size comes from the file name (…-WxH.html), default 1280×800.
+// Usage: node docs/store/render.mjs [name-filter]      Texts: src/strings.js
 import { spawn, execSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -22,9 +23,9 @@ ws.onmessage = (e) => { const m = JSON.parse(e.data); if (wait.has(m.id)) { wait
 const call = (method, params = {}, sessionId) => new Promise((res, rej) => { const i = ++id; wait.set(i, (m) => (m.error ? rej(new Error(`${method}: ${m.error.message}`)) : res(m.result))); ws.send(JSON.stringify({ id: i, method, params, sessionId })); });
 
 try {
-  fs.mkdirSync(path.join(here, 'images'), { recursive: true });
   const files = fs.readdirSync(path.join(here, 'src')).filter((f) => f.endsWith('.html') && f.includes(process.argv[2] || ''));
-  for (const f of files.sort()) {
+  for (const lang of ['en', 'it']) for (const f of files.sort()) {
+    fs.mkdirSync(path.join(here, 'images', lang), { recursive: true });
     const name = f.replace(/\.html$/, '');
     const m = name.match(/-(\d+)x(\d+)$/);
     const [width, height] = m ? [+m[1], +m[2]] : [1280, 800];
@@ -32,12 +33,12 @@ try {
     const sid = (await call('Target.attachToTarget', { targetId, flatten: true })).sessionId;
     await call('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }, sid);
     await call('Page.enable', {}, sid);
-    await call('Page.navigate', { url: `file://${path.join(here, 'src', f)}` }, sid);
+    await call('Page.navigate', { url: `file://${path.join(here, 'src', f)}?lang=${lang}` }, sid);
     await call('Runtime.evaluate', { expression: 'new Promise(r => (document.readyState === "complete" ? r() : addEventListener("load", r))).then(() => document.fonts.ready).then(() => new Promise(r => setTimeout(r, 300)))', awaitPromise: true }, sid);
     const shot = await call('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 0, width, height, scale: 1 } }, sid);
-    fs.writeFileSync(path.join(here, 'images', `${name}.png`), Buffer.from(shot.data, 'base64'));
+    fs.writeFileSync(path.join(here, 'images', lang, `${name}.png`), Buffer.from(shot.data, 'base64'));
     await call('Target.closeTarget', { targetId });
-    console.log(`✓ images/${name}.png (${width}×${height})`);
+    console.log(`✓ images/${lang}/${name}.png (${width}×${height})`);
   }
 } finally {
   ws.close(); proc.kill(); await sleep(300); fs.rmSync(profile, { recursive: true, force: true });

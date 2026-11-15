@@ -10,6 +10,7 @@ import {
 } from './mediabunny.min.mjs';
 import { fetchBytes, fetchText, CancelledError } from './net.js';
 import { parseMediaPlaylist } from './hls.js';
+import { m } from './i18n.js';
 
 // ISO 639-1 -> 639-2/T (what Matroska/MP4 muxers expect)
 const LANG3 = {
@@ -89,7 +90,7 @@ export async function downloadTrack(url, { dir, name, fetchOpts, parallel = 8, o
   const signal = fetchOpts?.signal;
   await ensureHosts?.([url]);
   const segs = parseMediaPlaylist(await fetchText(url, fetchOpts), url);
-  if (!segs.length) throw new Error('Playlist vuota');
+  if (!segs.length) throw new Error(m('eng_emptyPlaylist'));
   await ensureHosts?.(segmentHosts(segs));
   const fh = await dir.getFileHandle(name, { create: true });
   const w = await fh.createWritable();
@@ -130,7 +131,7 @@ export async function downloadTrack(url, { dir, name, fetchOpts, parallel = 8, o
     throw e;
   }
   await w.close();
-  if (kind === null || kind === 'unknown') throw new Error(`Formato dei segmenti non riconosciuto (${name})`);
+  if (kind === null || kind === 'unknown') throw new Error(m('eng_unknownSegments', name));
   return { file: await fh.getFile(), kind, startPts, duration: segs.reduce((a, s) => a + s.dur, 0), segments: segs.length };
 }
 
@@ -248,7 +249,7 @@ async function openTrack(dl, want) {
   }
   const input = new Input({ source: new BlobSource(dl.file), formats: ALL_FORMATS });
   const track = want === 'video' ? await input.getPrimaryVideoTrack() : await input.getPrimaryAudioTrack();
-  if (!track) throw new Error(`Nessuna traccia ${want} nel file scaricato (${dl.kind})`);
+  if (!track) throw new Error(m('eng_noTrack', want, dl.kind));
   const sink = new EncodedPacketSink(track);
   const gen = sink.packets();
   const first = await gen.next();
@@ -271,12 +272,12 @@ export async function mux({ tracks, subs = [], container = 'mkv', embedSubs = co
     try { opened.push({ ...t, ...(await openTrack(t.dl, t.type)) }); }
     catch (e) { if (!t.optional) throw e; }   // e.g. video rendition without muxed audio
   }
-  if (!opened.length) throw new Error('Nessuna traccia da unire');
+  if (!opened.length) throw new Error(m('eng_nothingToMux'));
   const base = Math.min(...opened.map((o) => o.startTs));
   // subtitles are placed on the same clock as audio/video
-  if (subs.length) onStage?.('Sottotitoli');
+  if (subs.length) onStage?.(m('eng_stageSubs'));
   for (const s of subs) if (s.url && !s.text) s.text = await downloadSubtitles(s.url, { fetchOpts, base, ensureHosts });
-  onStage?.('Unione in un unico file');
+  onStage?.(m('eng_stageMux'));
 
   const writable = await outHandle.createWritable();
   const output = new Output({

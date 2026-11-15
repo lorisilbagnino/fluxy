@@ -1,4 +1,4 @@
-<!doctype html><html lang="it"><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
 <style>
   .top { padding: 70px 80px 0; display: flex; flex-direction: column; gap: 16px; }
   .steps { position: absolute; left: 80px; right: 80px; top: 330px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
@@ -14,15 +14,15 @@
 </style></head><body>
 <div class="top">
   <div class="brand"><img src="assets/icon.svg">Fluxy</div>
-  <h1>Tre passi, <em>niente da installare</em>.</h1>
-  <p class="lead">Fluxy lavora solo quando glielo chiedi, sulla scheda che scegli.</p>
+  <h1 data-t="s3_h1"></h1>
+  <p class="lead" data-t="s3_lead"></p>
 </div>
 <div class="steps">
-  <div class="step"><span class="n">1</span><h2>Rileva</h2><p>Apri la pagina del video e premi <b>Rileva</b>: la pagina si ricarica e Fluxy intercetta gli stream del player.</p>
-    <div class="ui"><div class="row"><span class="live"></span>Rilevamento attivo</div><span class="btn">⟳ Rileva</span></div></div>
-  <div class="step"><span class="n">2</span><h2>Scegli</h2><p>Qualità del video, lingue dell'audio, sottotitoli. Le tue lingue preferite sono già selezionate.</p>
-    <div class="ui"><div class="row"><span class="box"></span>1080p · H.264</div><div class="row"><span class="box"></span>Italiano · AAC 2.0</div><div class="row"><span class="box off"></span>Français · AAC 2.0</div></div></div>
-  <div class="step"><span class="n">3</span><h2>Scarica</h2><p>Segmenti in parallelo, unione senza ricodifica, file finale nella cartella Download.</p>
-    <div class="ui"><div class="row" style="justify-content:space-between"><span>Dolomiti</span><span style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden"><b style="background:var(--accent);color:#1a1200;padding:4px 9px">MKV</b><span style="padding:4px 9px;color:var(--muted)">MP4</span></span></div><span class="btn primary">Scarica</span></div></div>
+  <div class="step"><span class="n">1</span><h2 data-t="s3_t1"></h2><p data-t="s3_p1"></p>
+    <div class="ui"><div class="row"><span class="live"></span><span data-t="s3_live"></span></div><span class="btn" data-t="s3_btn1"></span></div></div>
+  <div class="step"><span class="n">2</span><h2 data-t="s3_t2"></h2><p data-t="s3_p2"></p>
+    <div class="ui"><div class="row"><span class="box"></span>1080p · H.264</div><div class="row"><span class="box"></span><span data-t="s3_r2"></span></div><div class="row"><span class="box off"></span>Français · AAC 2.0</div></div></div>
+  <div class="step"><span class="n">3</span><h2 data-t="s3_t3"></h2><p data-t="s3_p3"></p>
+    <div class="ui"><div class="row" style="justify-content:space-between"><span data-t="s3_name"></span><span style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden"><b style="background:var(--accent);color:#1a1200;padding:4px 9px">MKV</b><span style="padding:4px 9px;color:var(--muted)">MP4</span></span></div><span class="btn primary" data-t="s3_btn3"></span></div></div>
 </div>
-</body></html>
+<script src="strings.js"></script></body></html>

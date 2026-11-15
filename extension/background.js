@@ -5,6 +5,10 @@
 import { DEFAULT_SETTINGS, childSet, isChild, isBlockedUrl } from './shared.js';
 import { probeHls } from './engine/hls.js';
 import { fetchText } from './engine/net.js';
+import { engineStrings } from './engine/i18n.js';
+
+const tx = (key, ...subs) => chrome.i18n.getMessage(key, subs.map(String)) || key;
+const UI_LANG = chrome.i18n.getUILanguage();
 
 const HOST = 'com.fluxy.host';
 const MANIFEST_URL_RE = /\.(m3u8|mpd)(?:[?#;]|$)/i;
@@ -131,7 +135,7 @@ const ready = (async () => {
   for (const id of stored || []) armed.add(id);
   loaded = true;
   // Firefox: a new event page means the previous one (and its downloads) is gone.
-  if (IS_FIREFOX) failRunningJobs('Interrotto: il browser ha sospeso l\'estensione', 'browser');
+  if (IS_FIREFOX) failRunningJobs(tx('errSuspended'), 'browser');
   refreshListening();
 })();
 
@@ -217,7 +221,22 @@ async function probeStream(tabId, streamId) {
   });
 }
 
-// HLS is analysed here (no native host needed); DASH needs the native host (yt-dlp).
+/** Adds the tab's page itself as a "stream" analysed by yt-dlp (sites without HLS/DASH playlists, e.g. YouTube). */
+async function probePage(tabId) {
+  const tab = await chrome.tabs.get(tabId);
+  if (isBlockedUrl(tab.url)) throw new Error(tx('youtubeUnsupported'));
+  let id;
+  await withTab(tabId, (tt) => {
+    const existing = tt.streams.find((x) => x.kind === 'page' && x.url === tab.url);
+    if (existing) { id = existing.id; existing.probe = null; return; }
+    id = crypto.randomUUID().slice(0, 8);
+    tt.streams.push({ id, url: tab.url, kind: 'page', headers: {}, title: tab.title || '', pageUrl: tab.url, detectedAt: Date.now(), probe: null });
+  });
+  await probeStream(tabId, id);
+  return id;
+}
+
+// HLS is analysed here (no native host needed); DASH and pages need the native host (yt-dlp).
 async function analyse(stream) {
   if (stream.kind === 'hls' || /\.m3u8(?:[?#;]|$)/i.test(stream.url)) {
     const key = `probe:${stream.id}`;
@@ -232,11 +251,9 @@ async function analyse(stream) {
   }
   let res;
   try {
-    res = await hostRequest({ type: 'probe', url: stream.url, headers: stream.headers }, 120_000);
+    res = await hostRequest({ type: 'probe', url: stream.url, headers: stream.headers, kind: stream.kind }, 120_000);
   } catch (e) {
-    if (HOST_MISSING_RE.test(e.message)) {
-      throw Object.assign(new Error("I flussi DASH richiedono l'app locale (ffmpeg + yt-dlp): installala da ⚙ → Motore."), { needsHost: true });
-    }
+    if (HOST_MISSING_RE.test(e.message)) throw Object.assign(new Error(tx('errNeedsHost')), { needsHost: true });
     throw e;
   }
   if (!res.ok) throw new Error(res.error);
@@ -312,7 +329,7 @@ function getPort() {
   port = chrome.runtime.connectNative(HOST);
   port.onMessage.addListener(onHostMessage);
   port.onDisconnect.addListener((p) => {
-    const err = p?.error?.message || chrome.runtime.lastError?.message || 'Programma locale disconnesso';
+    const err = p?.error?.message || chrome.runtime.lastError?.message || tx('hostDisconnected');
     port = null;
     for (const p of pending.values()) p.reject(new Error(err));
     pending.clear();
@@ -337,19 +354,19 @@ function hostRequest(msg, timeout = 30_000) {
   return new Promise((resolve, reject) => {
     const id = ++seq;
     const timer = setTimeout(() => {
-      if (pending.delete(id)) reject(new Error('Timeout dal programma locale'));
+      if (pending.delete(id)) reject(new Error(tx('hostTimeout')));
     }, timeout);
     pending.set(id, {
       resolve: (v) => { clearTimeout(timer); resolve(v); },
       reject: (e) => { clearTimeout(timer); reject(e); },
     });
-    try { getPort().postMessage({ ...msg, id }); touchPort(); }
+    try { getPort().postMessage({ ...msg, id, lang: UI_LANG }); touchPort(); }
     catch (e) { pending.delete(id); clearTimeout(timer); reject(e); }
   });
 }
 
 function hostSend(msg) {
-  getPort().postMessage(msg);
+  getPort().postMessage({ ...msg, lang: UI_LANG });
   touchPort();
 }
 
@@ -404,7 +421,7 @@ function failRunningJobs(err, engine = 'native') {
   return mutateJobs((jobs) => {
     for (const j of Object.values(jobs)) {
       if ((j.engine || 'native') === engine && (j.state === 'running' || j.state === 'saving')) {
-        Object.assign(j, { state: 'error', error: err, stage: 'Errore', finishedAt: Date.now() });
+        Object.assign(j, { state: 'error', error: err, stage: tx('stageError'), finishedAt: Date.now() });
       }
     }
   });
@@ -423,17 +440,17 @@ async function getSettings() {
 async function startDownload({ tabId, streamId, videoId, audioIds, subIds, container, filename }) {
   const t = await loadTab(tabId);
   const s = t.streams.find((x) => x.id === streamId);
-  if (!s || s.probe?.status !== 'ok') throw new Error('Stream non analizzato');
+  if (!s || s.probe?.status !== 'ok') throw new Error(tx('errNotAnalysed'));
   const d = s.probe.data;
   const settings = await getSettings();
   const pick = (list, ids) => list.filter((x) => ids.includes(x.id));
   const video = d.video.find((v) => v.id === videoId) || null;
   const audio = pick(d.audio, audioIds || []);
   const subs = pick(d.subs, subIds || []);
-  if (!video && !audio.length) throw new Error('Seleziona almeno un flusso video o audio');
+  if (!video && !audio.length) throw new Error(tx('errPickOne'));
 
-  // DASH is only handled by the native host (its analysis already required it).
-  const engine = d.kind === 'dash' ? 'native' : settings.engine;
+  // Only HLS has an in-browser engine: DASH and yt-dlp pages need the native host (their analysis already did).
+  const engine = d.kind === 'hls' ? settings.engine : 'native';
   // Start the engine first: a fresh offscreen document fails jobs left by a previous one.
   if (engine === 'browser') await browserEngine.prepare();
   const jobId = crypto.randomUUID().slice(0, 12);
@@ -442,11 +459,12 @@ async function startDownload({ tabId, streamId, videoId, audioIds, subIds, conta
     outputDir: settings.outputDir, fragments: Number(settings.fragments) || 8, parallel: Number(settings.fragments) || 8,
     title: filename || s.title, filename: filename || s.title, duration: d.duration,
     video, audio, subs,
+    strings: engine === 'browser' ? engineStrings() : undefined,
   };
   await mutateJobs((jobs) => {
     jobs[jobId] = {
       id: jobId, engine, filename: spec.filename, container: spec.container, describe: describeSel(video, audio, subs),
-      state: 'running', progress: 0, stage: 'In coda', startedAt: Date.now(),
+      state: 'running', progress: 0, stage: tx('stageQueued'), startedAt: Date.now(),
       headers: engine === 'browser' ? s.headers : undefined,
     };
   });
@@ -484,8 +502,8 @@ function offscreenEngine() {
     if (await chrome.offscreen.hasDocument()) return;
     creating ||= chrome.offscreen.createDocument({
       url: 'offscreen.html', reasons: ['BLOBS', 'WORKERS'],
-      justification: 'Scarica i segmenti e unisce le tracce in un unico file',
-    }).then(() => failRunningJobs('Interrotto: il motore del browser è stato riavviato', 'browser'))
+      justification: tx('offscreenJustification'),
+    }).then(() => failRunningJobs(tx('errEngineRestarted'), 'browser'))
       .finally(() => { creating = null; });
     await creating;
   };
@@ -528,7 +546,7 @@ async function onEngineEvent(jobId, fields) {
   await updateJob(jobId, rest);
   if (rest.state && rest.state !== 'running') removeHeaderRule(`job:${jobId}`);
   if (rest.state === 'saving') saveFiles(jobId, files).catch(async (e) => {
-    await updateJob(jobId, { state: 'error', stage: 'Errore', error: `Salvataggio non riuscito: ${e.message}` });
+    await updateJob(jobId, { state: 'error', stage: tx('stageError'), error: tx('errSaveFailed', e.message) });
     browserEngine.cleanup(jobId);
   });
 }
@@ -583,12 +601,12 @@ async function onDownloadChanged(delta) {
       if (!x || x.state !== 'saving') return;
       if (output) x.output = output;
       x.downloadsLeft = (x.downloadsLeft || 1) - 1;
-      if (x.downloadsLeft <= 0) Object.assign(x, { state: 'done', progress: 1, stage: 'Completato', finishedAt: Date.now() });
+      if (x.downloadsLeft <= 0) Object.assign(x, { state: 'done', progress: 1, stage: tx('stageDone'), finishedAt: Date.now() });
       finished = x.state === 'done';
     });
   } else {
     const why = delta.error?.current || 'interrotto';
-    await updateJob(j.id, { state: 'error', stage: 'Errore', error: `Salvataggio non riuscito (${why})` });
+    await updateJob(j.id, { state: 'error', stage: tx('stageError'), error: tx('errSaveInterrupted', why) });
     finished = true;
   }
   if (finished) browserEngine.cleanup(j.id);
@@ -607,18 +625,18 @@ const b64 = (text) => {
 
 async function downloadInstaller() {
   const { os } = await chrome.runtime.getPlatformInfo();
-  if (os === 'win') throw new Error("Su Windows l'installazione automatica non è ancora disponibile.");
+  if (os === 'win') throw new Error(tx('errWindowsInstaller'));
   const get = async (p) => {
     const r = await fetch(chrome.runtime.getURL(p));
-    if (!r.ok) throw new Error(`File ${p} mancante nell'estensione: esegui ./build.py`);
+    if (!r.ok) throw new Error(tx('errMissingFile', p));
     return r.text();
   };
   const [py, sh] = await Promise.all([get('native/fluxy_host.py'), get('native/install.sh')]);
   const ids = IS_FIREFOX ? `FLUX_GECKO_ID=${chrome.runtime.id}` : `FLUX_EXT_ID=${chrome.runtime.id}`;
   const script = [
     '#!/usr/bin/env bash',
-    '# Fluxy — installa l\'app locale (generato dall\'estensione).',
-    '# Esegui:  bash "<questo file>"      Rimuovi:  bash "<questo file>" --uninstall',
+    '# Fluxy — installs the local app (generated by the extension).',
+    '# Run:  bash "<this file>"      Remove:  bash "<this file>" --uninstall',
     'set -euo pipefail',
     'case "$(uname -s)" in',
     '  Darwin) FLUX_DEST="$HOME/Library/Application Support/fluxy" ;;',
@@ -641,10 +659,10 @@ async function downloadInstaller() {
   for (let i = 0; i < 100; i++) {
     const [item] = await chrome.downloads.search({ id });
     if (item?.state === 'complete') return { path: item.filename, os };
-    if (item?.state === 'interrupted') throw new Error(`Download dell'installer non riuscito (${item.error})`);
+    if (item?.state === 'interrupted') throw new Error(tx('errInstallerFailed', item.error));
     await new Promise((r) => setTimeout(r, 100));
   }
-  throw new Error("Download dell'installer non completato");
+  throw new Error(tx('errInstallerIncomplete'));
 }
 
 // ------------------------------------------------------ popup messages ---
@@ -654,7 +672,7 @@ async function cancelJob(jobId) {
   if (j.engine === 'browser') {
     if (j.state === 'saving') {
       for (const id of j.downloadIds || []) await chrome.downloads.cancel(id).catch(() => {});
-      await updateJob(jobId, { state: 'cancelled', stage: 'Annullato' });
+      await updateJob(jobId, { state: 'cancelled', stage: tx('stageCancelled') });
       browserEngine.cleanup(jobId);
     } else await browserEngine.cancel(jobId);
   } else hostSend({ type: 'cancel', jobId });
@@ -676,6 +694,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
       case 'hostCheck': await checkHost(); return {};
       case 'installer': return await downloadInstaller();
       case 'probe': await probeStream(msg.tabId, msg.streamId); return {};
+      case 'probePage': return { streamId: await probePage(msg.tabId) };
       case 'download': return { jobId: await startDownload(msg) };
       case 'cancel': await cancelJob(msg.jobId); return {};
       case 'reveal': await reveal(msg.jobId); return {};

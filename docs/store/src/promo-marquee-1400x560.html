@@ -1,4 +1,4 @@
-<!doctype html><html lang="it"><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
 <style>
   .wrap { display: grid; grid-template-columns: 520px 1fr; align-items: center; height: 100%; padding: 0 90px; gap: 40px; }
   .logo { position: relative; width: 420px; height: 420px; }
@@ -9,7 +9,7 @@
   <div class="logo"><img src="assets/icon.svg">
     <span class="lbl" style="left:-10px;top:20px;color:var(--video)">video</span>
     <span class="lbl" style="right:-14px;top:20px;color:var(--audio)">audio</span>
-    <span class="lbl" style="left:248px;bottom:-4px;color:var(--subs)">sottotitoli</span>
+    <span class="lbl" style="left:248px;bottom:-4px;color:var(--subs)" data-t="m_subs"></span>
   </div>
-  <div><h1>Fluxy</h1><p class="lead">Salva gli stream HLS e DASH in un unico <b style="color:var(--text)">MKV o MP4</b>, con le lingue e i sottotitoli che scegli. <em style="font-style:normal;color:var(--accent)">Senza ricodifica.</em></p></div>
-</div></body></html>
+  <div><h1>Fluxy</h1><p class="lead" data-t="m_lead"></p></div>
+</div><script src="strings.js"></script></body></html>

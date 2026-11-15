@@ -4,6 +4,7 @@
 
 import { downloadTrack, mux, vttToSrt, lang3 } from './engine.js';
 import { setMaxConnections, CancelledError } from './net.js';
+import { m, setStrings } from './i18n.js';
 
 const JOB_PREFIX = 'flux-job-';
 const jobs = new Map();   // jobId -> {ctrl, dir, urls: []}
@@ -20,20 +21,21 @@ export async function cleanupOrphans() {
   }
 }
 
-function gb(bytes) { return (bytes / 1073741824).toFixed(1).replace('.', ','); }
+function gb(bytes) { return (bytes / 1073741824).toLocaleString(undefined, { maximumFractionDigits: 1 }); }
 
 export async function startJob(jobId, spec, bridge) {
   const ctrl = new AbortController();
   const job = { ctrl, dir: null, urls: [] };
   jobs.set(jobId, job);
   const emit = (f) => bridge.emit(jobId, f);
+  setStrings(spec.strings);
   try {
     const res = await run(jobId, spec, job, emit, bridge);
-    emit({ state: 'saving', progress: 0.99, stage: 'Salvataggio', speed: null, eta: null, files: res });
+    emit({ state: 'saving', progress: 0.99, stage: m('eng_stageSaving'), speed: null, eta: null, files: res });
   } catch (e) {
     const cancelled = e instanceof CancelledError || ctrl.signal.aborted;
     if (!cancelled) console.error('[flux] job failed', e);
-    emit(cancelled ? { state: 'cancelled', stage: 'Annullato' } : { state: 'error', stage: 'Errore', error: e.message || String(e) });
+    emit(cancelled ? { state: 'cancelled', stage: m('stageCancelled') } : { state: 'error', stage: m('stageError'), error: e.message || String(e) });
     await cleanupJob(jobId);
   }
 }
@@ -59,7 +61,7 @@ async function run(jobId, spec, job, emit, bridge) {
   if (est && navigator.storage.estimate) {
     const { quota = 0, usage = 0 } = await navigator.storage.estimate();
     if (quota && quota - usage < est * 2.05) {
-      throw new Error(`Spazio insufficiente: servono circa ${gb(est * 2)} GB liberi, il browser ne concede ${gb(quota - usage)}`);
+      throw new Error(m('eng_noSpace', gb(est * 2), gb(quota - usage)));
     }
   }
 
@@ -87,7 +89,7 @@ async function run(jobId, spec, job, emit, bridge) {
     lastEmit = now;
     const frac = expected ? Math.min(1, bytes / expected) : 0;
     emit({
-      state: 'running', progress: 0.9 * frac, stage: `Download (${wanted.length} ${wanted.length === 1 ? 'traccia' : 'tracce'})`,
+      state: 'running', progress: 0.9 * frac, stage: wanted.length === 1 ? m('eng_stageDownload1') : m('eng_stageDownloadN', wanted.length),
       speed, eta: speed > 0 ? Math.max(0, (expected - bytes) / speed) : null,
     });
   };
@@ -102,7 +104,7 @@ async function run(jobId, spec, job, emit, bridge) {
   const container = spec.container === 'mp4' ? 'mp4' : 'mkv';
   const out = await job.dir.getFileHandle(`out.${container}`, { create: true });
   const subs = (spec.subs || []).map((s) => ({ ...s }));
-  let stage = 'Unione in un unico file';
+  let stage = m('eng_stageMux');
   // A lone media playlist may turn out to be audio only: then the video track is optional.
   const tracks = wanted.map((w, i) => ({ dl: dls[i], type: w.type, lang: w.lang, name: w.name, optional: w.type === 'video' && !!w.maybeAudio }));
   // audio muxed inside the video rendition, when no separate audio was chosen

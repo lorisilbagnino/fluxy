@@ -1,0 +1,425 @@
+{
+  "extName": {
+    "message": "Fluxy – Stream Downloader"
+  },
+  "extDescription": {
+    "message": "Salva gli stream HLS/DASH in un unico MKV/MP4 con le tracce audio e i sottotitoli che scegli. Senza ricodifica, senza installare nulla."
+  },
+  "engineStatusTitle": {
+    "message": "Motore di download"
+  },
+  "settings": {
+    "message": "Impostazioni"
+  },
+  "engine": {
+    "message": "Motore"
+  },
+  "engineBrowser": {
+    "message": "Tutto nel browser"
+  },
+  "engineBrowserHelp": {
+    "message": "Niente da installare. Il file finisce nella cartella Download del browser. Solo HLS."
+  },
+  "engineNative": {
+    "message": "App locale (ffmpeg + yt-dlp)"
+  },
+  "engineNativeHelp": {
+    "message": "Anche DASH, cartella di destinazione a scelta, unione con ffmpeg."
+  },
+  "verify": {
+    "message": "verifica"
+  },
+  "installLocalApp": {
+    "message": "Installa app locale"
+  },
+  "outputDir": {
+    "message": "Cartella di destinazione (app locale)"
+  },
+  "defaultFormat": {
+    "message": "Formato predefinito"
+  },
+  "parallel": {
+    "message": "Connessioni in parallelo"
+  },
+  "autoDetect": {
+    "message": "Rilevamento automatico su tutte le schede"
+  },
+  "autoDetectHelp": {
+    "message": "Se disattivo, l'estensione non osserva la rete finché non premi “Rileva” su una scheda."
+  },
+  "prefLangs": {
+    "message": "Lingue preferite (preselezionate)"
+  },
+  "downloads": {
+    "message": "Download"
+  },
+  "clearFinished": {
+    "message": "rimuovi completati"
+  },
+  "streamsInTab": {
+    "message": "Stream in questa scheda"
+  },
+  "clear": {
+    "message": "svuota"
+  },
+  "clearTitle": {
+    "message": "Svuota l'elenco"
+  },
+  "stop": {
+    "message": "ferma"
+  },
+  "detect": {
+    "message": "⟳ Rileva"
+  },
+  "detectTitle": {
+    "message": "Ricarica la pagina e intercetta gli stream che il player carica"
+  },
+  "reload": {
+    "message": "⟳ Ricarica"
+  },
+  "copyUrl": {
+    "message": "copia URL"
+  },
+  "copyUrlTitle": {
+    "message": "Copia l'URL del manifest"
+  },
+  "copied": {
+    "message": "copiato ✓"
+  },
+  "donate": {
+    "message": "Sostieni Fluxy ♥"
+  },
+  "langUnknown": {
+    "message": "Lingua sconosciuta"
+  },
+  "appNotChecked": {
+    "message": "App locale: non verificata"
+  },
+  "appMissingTools": {
+    "message": "App locale installata, manca $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "appReady": {
+    "message": "App locale pronta (v$p1$)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "appNotInstalled": {
+    "message": "App locale non installata"
+  },
+  "appCommError": {
+    "message": "App locale: errore di comunicazione"
+  },
+  "missing": {
+    "message": "mancante"
+  },
+  "pillBrowser": {
+    "message": "nel browser"
+  },
+  "pillBrowserTitle": {
+    "message": "Download e unione nel browser, niente da installare"
+  },
+  "pillNative": {
+    "message": "app locale"
+  },
+  "pillNativeMissing": {
+    "message": "app mancante"
+  },
+  "pillNativeError": {
+    "message": "errore app"
+  },
+  "toolsMissing": {
+    "message": "Mancano: $p1$. Per installarli:",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "cryptoMissing": {
+    "message": "yt-dlp non trova pycryptodomex: gli stream cifrati (AES-128) verranno scaricati da ffmpeg un segmento alla volta, molto più lentamente. Per installarlo:"
+  },
+  "nativeChosenMissing": {
+    "message": "Hai scelto l'app locale, ma non è installata."
+  },
+  "nativeCommError": {
+    "message": "Errore di comunicazione con l'app locale: "
+  },
+  "useBrowserEngine": {
+    "message": "usa il motore nel browser"
+  },
+  "preparingInstaller": {
+    "message": "Preparo l'installer…"
+  },
+  "installerSaved": {
+    "message": "Installer salvato in Download. Apri un terminale ed esegui:"
+  },
+  "installerExplain": {
+    "message": "Copia l'app in ~/.local/share/fluxy, la registra in Brave/Chrome/Firefox e propone di installare ffmpeg e yt-dlp se mancano."
+  },
+  "copyCommand": {
+    "message": "copia comando"
+  },
+  "doneVerify": {
+    "message": "fatto, verifica"
+  },
+  "detectActive": {
+    "message": "Rilevamento attivo su questa scheda"
+  },
+  "detectManual": {
+    "message": "Rilevamento manuale"
+  },
+  "youtubeUnsupported": {
+    "message": "I video di YouTube non sono supportati."
+  },
+  "noStreamsYet": {
+    "message": "Nessuno stream ancora. Avvia la riproduzione del video: gli stream compaiono qui appena il player li carica."
+  },
+  "autoOff": {
+    "message": "Rilevamento automatico disattivato. Premi “Rileva”: la pagina viene ricaricata e gli stream che il player carica compaiono qui."
+  },
+  "analysing": {
+    "message": "Analisi dello stream…"
+  },
+  "unknownError": {
+    "message": "Errore sconosciuto"
+  },
+  "retry": {
+    "message": "Riprova"
+  },
+  "installLocalAppLink": {
+    "message": "installa app locale"
+  },
+  "drmProtected": {
+    "message": "Protetto da DRM ($p1$): non è possibile scaricarlo.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "liveStream": {
+    "message": "Stream in diretta: verrà scaricato solo ciò che è già disponibile."
+  },
+  "encryptionOk": {
+    "message": "Cifratura $p1$ con chiave in chiaro: supportata.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "video": {
+    "message": "Video"
+  },
+  "audio": {
+    "message": "Audio"
+  },
+  "subtitles": {
+    "message": "Sottotitoli"
+  },
+  "audioIncluded": {
+    "message": "audio incluso"
+  },
+  "noVideo": {
+    "message": "Nessun video (solo audio)"
+  },
+  "forced": {
+    "message": "forced"
+  },
+  "download": {
+    "message": "Scarica"
+  },
+  "fileName": {
+    "message": "Nome del file"
+  },
+  "cancel": {
+    "message": "annulla"
+  },
+  "showFile": {
+    "message": "mostra file"
+  },
+  "openFolder": {
+    "message": "apri cartella"
+  },
+  "remove": {
+    "message": "rimuovi"
+  },
+  "error": {
+    "message": "Errore"
+  },
+  "pageCardTitle": {
+    "message": "Questa pagina"
+  },
+  "pageCardText": {
+    "message": "YouTube non usa playlist HLS/DASH standard: l'app locale può analizzare la pagina con yt-dlp."
+  },
+  "pageCardButton": {
+    "message": "Analizza con yt-dlp"
+  },
+  "stageQueued": {
+    "message": "In coda"
+  },
+  "stageDone": {
+    "message": "Completato"
+  },
+  "stageCancelled": {
+    "message": "Annullato"
+  },
+  "stageError": {
+    "message": "Errore"
+  },
+  "errNotAnalysed": {
+    "message": "Stream non analizzato"
+  },
+  "errPickOne": {
+    "message": "Seleziona almeno un flusso video o audio"
+  },
+  "errNeedsHost": {
+    "message": "Questo stream richiede l'app locale (ffmpeg + yt-dlp): installala da ⚙ → Motore."
+  },
+  "errEngineRestarted": {
+    "message": "Interrotto: il motore del browser è stato riavviato"
+  },
+  "errSuspended": {
+    "message": "Interrotto: il browser ha sospeso l'estensione"
+  },
+  "errSaveFailed": {
+    "message": "Salvataggio non riuscito: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "errSaveInterrupted": {
+    "message": "Salvataggio non riuscito ($p1$)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "errWindowsInstaller": {
+    "message": "Su Windows l'installazione automatica non è ancora disponibile."
+  },
+  "errMissingFile": {
+    "message": "File $p1$ mancante nell'estensione: esegui ./build.py",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "errInstallerFailed": {
+    "message": "Download dell'installer non riuscito ($p1$)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "errInstallerIncomplete": {
+    "message": "Download dell'installer non completato"
+  },
+  "hostDisconnected": {
+    "message": "Programma locale disconnesso"
+  },
+  "hostTimeout": {
+    "message": "Il programma locale non ha risposto in tempo"
+  },
+  "offscreenJustification": {
+    "message": "Scarica i segmenti e unisce le tracce in un unico file"
+  },
+  "eng_cancelled": {
+    "message": "Annullato"
+  },
+  "eng_http": {
+    "message": "$p1$ da $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "eng_httpDenied": {
+    "message": " — il server rifiuta la richiesta: riapri la pagina e premi Rileva per aggiornare i permessi"
+  },
+  "eng_unsupportedEnc": {
+    "message": "Cifratura non supportata: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "eng_notHls": {
+    "message": "Il file non sembra una playlist HLS"
+  },
+  "eng_emptyPlaylist": {
+    "message": "Playlist vuota"
+  },
+  "eng_unknownSegments": {
+    "message": "Formato dei segmenti non riconosciuto ($p1$)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "eng_noTrack": {
+    "message": "Nessuna traccia $p1$ nel file scaricato ($p2$)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "eng_nothingToMux": {
+    "message": "Nessuna traccia da unire"
+  },
+  "eng_noSpace": {
+    "message": "Spazio insufficiente: servono circa $p1$ GB liberi, il browser ne concede $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "eng_stageDownload1": {
+    "message": "Download (1 traccia)"
+  },
+  "eng_stageDownloadN": {
+    "message": "Download ($p1$ tracce)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "eng_stageSubs": {
+    "message": "Sottotitoli"
+  },
+  "eng_stageMux": {
+    "message": "Unione in un unico file"
+  },
+  "eng_stageSaving": {
+    "message": "Salvataggio"
+  }
+}

@@ -1,4 +1,4 @@
-<!doctype html><html lang="it"><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
 <style>
   .top { padding: 60px 80px 0; display: flex; flex-direction: column; gap: 16px; }
   .top h1 { font-size: 56px; }
@@ -16,8 +16,8 @@
 </style></head><body>
 <div class="top">
   <div class="brand"><img src="assets/icon.svg">Fluxy</div>
-  <h1>Tre flussi, <em>un file</em>.</h1>
-  <p class="lead" style="max-width:820px">Gli stream adattivi arrivano a pezzi: video, ogni lingua audio e ogni sottotitolo separati, in centinaia di segmenti. Fluxy li ricompone.</p>
+  <h1 data-t="s2_h1"></h1>
+  <p class="lead" style="max-width:820px" data-t="s2_lead"></p>
 </div>
 <svg class="flow" viewBox="0 0 1280 520">
   <defs>
@@ -37,18 +37,18 @@
   </g>
   <circle cx="760" cy="200" r="34" fill="url(#core)"/>
 </svg>
-<div class="lane" style="top:286px"><span class="dot" style="background:var(--video)">V</span><div>Video<small>1080p · H.264</small></div></div>
-<div class="lane" style="top:426px"><span class="dot" style="background:var(--audio)">A</span><div>Audio<small>Italiano · English 5.1</small></div></div>
-<div class="lane" style="top:566px"><span class="dot" style="background:var(--subs)">S</span><div>Sottotitoli<small>Italiano · forced</small></div></div>
+<div class="lane" style="top:286px"><span class="dot" style="background:var(--video)">V</span><div><span data-t="video"></span><small>1080p · H.264</small></div></div>
+<div class="lane" style="top:426px"><span class="dot" style="background:var(--audio)">A</span><div><span data-t="audio"></span><small data-t="s2_audio"></small></div></div>
+<div class="lane" style="top:566px"><span class="dot" style="background:var(--subs)">S</span><div><span data-t="subtitles"></span><small data-t="s2_subs"></small></div></div>
 <div class="file shadow">
-  <h3>Dolomiti.mkv <span>MKV</span></h3>
+  <h3><span data-t="s2_file" style="all:unset"></span> <span>MKV</span></h3>
   <ul>
     <li><i style="background:var(--video)"></i>Video 1920×1080</li>
-    <li><i style="background:var(--audio)"></i>Audio Italiano (predefinito)</li>
+    <li><i style="background:var(--audio)"></i><span data-t="s2_i2"></span></li>
     <li><i style="background:var(--audio)"></i>Audio English 5.1</li>
-    <li><i style="background:var(--subs)"></i>Sottotitoli Italiano</li>
-    <li><i style="background:var(--subs)"></i>Sottotitoli Italiano (forced)</li>
+    <li><i style="background:var(--subs)"></i><span data-t="s2_i4"></span></li>
+    <li><i style="background:var(--subs)"></i><span data-t="s2_i5"></span></li>
   </ul>
 </div>
-<p class="note"><b>Nessuna ricodifica:</b> i dati vengono copiati così come sono. Qualità originale, unione in pochi secondi.</p>
-</body></html>
+<p class="note" data-t="s2_note"></p>
+<script src="strings.js"></script></body></html>

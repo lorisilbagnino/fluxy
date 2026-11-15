@@ -1,4 +1,4 @@
-<!doctype html><html lang="it"><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
 <style>
   .wrap { display: grid; grid-template-columns: 410px 1fr; gap: 40px; padding: 64px 0 0 70px; height: 100%; }
   .copy { display: flex; flex-direction: column; gap: 26px; padding-top: 30px; }
@@ -21,22 +21,22 @@
 <div class="wrap">
   <div class="copy">
     <div class="brand"><img src="assets/icon.svg">Fluxy</div>
-    <h1>Scegli video, audio e <em>sottotitoli</em>.</h1>
-    <p class="lead">Fluxy trova gli stream della pagina e ti mostra ogni traccia: qualità, lingue, formati. Tu scegli, lui salva tutto in un solo file.</p>
+    <h1 data-t="s1_h1"></h1>
+    <p class="lead" data-t="s1_lead"></p>
     <div class="chips">
-      <span class="chip"><i style="background:var(--video)"></i>Fino a 1080p e oltre</span>
-      <span class="chip"><i style="background:var(--audio)"></i>Più lingue audio</span>
-      <span class="chip"><i style="background:var(--subs)"></i>Sottotitoli e forced</span>
+      <span class="chip"><i style="background:var(--video)"></i><span data-t="s1_c1"></span></span>
+      <span class="chip"><i style="background:var(--audio)"></i><span data-t="s1_c2"></span></span>
+      <span class="chip"><i style="background:var(--subs)"></i><span data-t="s1_c3"></span></span>
     </div>
   </div>
   <div class="browser shadow">
-    <div class="bar"><div class="dots"><i></i><i></i><i></i></div><div class="url">esempio.tv/documentari/dolomiti</div><div class="ext"><img src="assets/icon.svg"><b>1</b></div></div>
+    <div class="bar"><div class="dots"><i></i><i></i><i></i></div><div class="url" data-t="s1_url"></div><div class="ext"><img src="assets/icon.svg"><b>1</b></div></div>
     <div class="page">
       <div class="player"><div class="ctrl"><span class="p"></span><span class="t"><i></i></span></div></div>
-      <div class="ptitle">Dolomiti, la luce del tramonto</div>
-      <div class="psub">Documentario · 1 h 52 min</div>
+      <div class="ptitle" data-t="film"></div>
+      <div class="psub" data-t="s1_sub"></div>
       <div class="lines"><i style="width:520px"></i><i style="width:470px"></i><i style="width:500px"></i></div>
     </div>
-    <div class="popup shadow"><img src="assets/popup-streams.png"></div>
+    <div class="popup shadow"><img data-img="assets/popup-streams-{lang}.png"></div>
   </div>
-</div></body></html>
+</div><script src="strings.js"></script></body></html>
