@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
 """Fluxy native messaging host.
 
 Speaks the Chrome native messaging protocol on stdin/stdout (4-byte little
@@ -27,7 +29,7 @@ import traceback
 import urllib.parse
 import urllib.request
 
-VERSION = "0.5.1"
+VERSION = "0.5.2"
 CACHE_DIR = os.path.join(os.path.expanduser("~/.cache"), "fluxy")
 LOG_FILE = os.path.join(CACHE_DIR, "host.log")
 UA_FALLBACK = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "

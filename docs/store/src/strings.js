@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
 // Texts of the store images. Each page shows ?lang=en|it (default en):
 // [data-t] gets the string as HTML, [data-img] gets "{lang}" replaced in its src.
 const STRINGS = {
@@ -70,7 +72,7 @@ const STRINGS = {
   m_lead: ['Save HLS and DASH streams as one <b style="color:var(--text)">MKV or MP4</b>, with the languages and subtitles you pick. <em style="font-style:normal;color:var(--accent)">No re-encoding.</em>',
     'Salva gli stream HLS e DASH in un unico <b style="color:var(--text)">MKV o MP4</b>, con le lingue e i sottotitoli che scegli. <em style="font-style:normal;color:var(--accent)">Senza ricodifica.</em>'],
   m_subs: ['subtitles', 'sottotitoli'],
-  sp_open: ['Free', 'Gratuito'],
+  sp_open: ['Free · open source (GPL-3.0)', 'Gratuito · open source (GPL-3.0)'],
 };
 
 (() => {

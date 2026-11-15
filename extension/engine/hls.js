@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
 // HLS playlist parsing and stream analysis (no Mediabunny: runs in the
 // background worker too). Mirrors probe_hls() in host/fluxy_host.py: the result
 // has the same shape whichever engine downloads it.

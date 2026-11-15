@@ -182,6 +182,19 @@ If you register the app from the repository with `./host/install.sh` and then mo
 - For DASH and YouTube, yt-dlp groups subtitles by language: two tracks with the same language can't be told apart.
 - URLs with expiring tokens should be downloaded soon after detection (reload the page if they expire).
 
+## License
+
+Fluxy is free software: [GNU GPL v3.0 or later](LICENSE), with the [additional terms](ADDITIONAL-TERMS.md) allowed by
+section 7:
+
+- keep the attribution *"Based on Fluxy by lorisilbagnino"* in the code and in the line at the bottom of the
+  settings panel;
+- modified versions can't be called "Fluxy" and must say they are a modified version;
+- the license grants no rights to the Fluxy name and logo.
+
+Mediabunny (`extension/engine/mediabunny.min.mjs`) keeps its own license, MPL-2.0. Contributions sent as pull requests
+are accepted under the same license.
+
 ## Support
 
 Fluxy is free. If it's useful to you, you can support it with a spontaneous donation (link in the settings panel

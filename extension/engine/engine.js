@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
 // Fluxy — in-browser download engine.
 // Downloads HLS renditions with fetch (parallel, AES-128 via WebCrypto), stages
 // them in OPFS, then remuxes them with Mediabunny (packet copy, no re-encode)

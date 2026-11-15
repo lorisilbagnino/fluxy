@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
 // Runs browser-engine jobs: download -> mux -> hand a blob URL back for saving.
 // Lives in the offscreen document (Chromium) or in the background page (Firefox).
 // `bridge` is how it talks to the background: emit(jobId, fields), ensureHosts(jobId, urls).

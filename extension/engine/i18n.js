@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
 // Localised strings for the engine. Uses chrome.i18n where available (background,
 // popup); the Chromium offscreen document only has chrome.runtime, so it gets a
 // table of these strings from the background with each job (setStrings).

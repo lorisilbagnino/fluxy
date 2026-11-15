@@ -89,6 +89,14 @@
   "donate": {
     "message": "Sostieni Fluxy ♥"
   },
+  "credits": {
+    "message": "Fluxy $p1$ — di lorisilbagnino · licenza GPL-3.0",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
   "langUnknown": {
     "message": "Lingua sconosciuta"
   },

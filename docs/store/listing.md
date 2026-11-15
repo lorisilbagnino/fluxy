@@ -164,7 +164,8 @@ nessuna raccolta dati, permessi limitati alla funzione.
 
 **Categorie**: Download Management · Photos, Music & Videos
 **Contributions URL**: `<KOFI_URL>` (Ko-fi è tra i servizi accettati)
-**Licenza**: da scegliere (il repository non ne ha ancora una: es. MIT o MPL-2.0, compatibile con Mediabunny).
+**Licenza**: GNU General Public License v3.0 (GPL-3.0-or-later, con termini aggiuntivi in `ADDITIONAL-TERMS.md`:
+su AMO scegliere "GNU General Public License v3.0"). Codice sorgente: https://github.com/lorisilbagnino/fluxy
 **Informativa privacy**: il testo di `docs/PRIVACY.md`.
 
 **Note per i revisori** (Notes to reviewer):
@@ -214,6 +215,6 @@ I sorgenti HTML sono in `docs/store/src/` (testi in `src/strings.js`); si rigene
 - [ ] Account sviluppatore: Chrome Web Store (5 $ una tantum), AMO (gratis), Edge (gratis).
 - [ ] Informativa privacy raggiungibile da un URL pubblico (il repository è privato: GitHub Pages su repo privati
       richiede un piano a pagamento; in alternativa un gist pubblico o una pagina sul proprio sito).
-- [ ] Licenza del progetto.
+- [x] Licenza del progetto: GPL-3.0-or-later + termini aggiuntivi.
 - [ ] Aprire l'account Ko-fi, impostare la variabile `DONATE_URL` del repository e sostituire `<KOFI_URL>`.
 - [ ] Caricare `fluxy-<ver>-chrome-store.zip` / `fluxy-<ver>-firefox-store.xpi`, testi, immagini, giustificazioni.

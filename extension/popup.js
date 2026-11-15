@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
 import { DEFAULT_SETTINGS, childSet, isChild, isBlockedUrl, isPageSite } from './shared.js';
 import { DONATE_URL } from './build-flags.js';
 
@@ -501,6 +503,8 @@ async function init() {
   document.documentElement.lang = UI_LANG;
   translate();
   if (DONATE_URL) { $('#donate').href = DONATE_URL; $('#donate').hidden = false; }
+  $('#credits').textContent = t('credits', `v${chrome.runtime.getManifest().version}`);
+  $('#credits').title = 'Based on Fluxy by lorisilbagnino — https://github.com/lorisilbagnino/fluxy';
   bindSettings();
 
   const key = `tab:${tabId}`;

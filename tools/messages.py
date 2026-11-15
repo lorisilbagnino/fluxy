@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
 """Source of the UI strings: writes extension/_locales/{en,it}/messages.json.
 
 Edit the table below, then run ./build.py (or this script). "$1".."$9" are
@@ -46,6 +48,7 @@ M = {
     "copyUrlTitle": ("Copy the manifest URL", "Copia l'URL del manifest"),
     "copied": ("copied ✓", "copiato ✓"),
     "donate": ("Support Fluxy ♥", "Sostieni Fluxy ♥"),
+    "credits": ("Fluxy $1 — by lorisilbagnino · GPL-3.0 license", "Fluxy $1 — di lorisilbagnino · licenza GPL-3.0"),
     # popup: dynamic
     "langUnknown": ("Unknown language", "Lingua sconosciuta"),
     "appNotChecked": ("Local app: not checked", "App locale: non verificata"),

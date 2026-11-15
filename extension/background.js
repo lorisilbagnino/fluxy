@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
 // Fluxy — background (service worker on Chromium, event page on Firefox)
 // Detects HLS/DASH manifests, analyses them, runs downloads with the in-browser
 // engine (offscreen document / background page) or the optional native host.

@@ -94,6 +94,19 @@ Vedi le sezioni corrispondenti del [README inglese](README.md#debug). In breve: 
 `~/.cache/fluxy/host.log`; app locale testata su Linux (macOS da provare, Windows non ancora); niente DRM;
 `EXT-X-DISCONTINUITY` non riallineato nel motore nel browser.
 
+## Licenza
+
+Fluxy è software libero: [GNU GPL v3.0 o successiva](LICENSE), con i [termini aggiuntivi](ADDITIONAL-TERMS.md)
+previsti dalla sezione 7:
+
+- va conservata l'attribuzione *"Based on Fluxy by lorisilbagnino"* nel codice e nella riga in fondo alle
+  impostazioni;
+- le versioni modificate non possono chiamarsi "Fluxy" e devono dichiararsi modificate;
+- la licenza non concede diritti su nome e logo di Fluxy.
+
+Mediabunny (`extension/engine/mediabunny.min.mjs`) mantiene la sua licenza, MPL-2.0. I contributi inviati come pull
+request sono accettati con la stessa licenza.
+
 ## Sostieni Fluxy
 
 Fluxy è gratuito. Se ti è utile puoi sostenerlo con una donazione spontanea (link nelle impostazioni e nelle schede

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
 # Registers the Fluxy native messaging host for Chromium- and Firefox-based browsers
 # and offers to install its dependencies (ffmpeg, yt-dlp).
 #   ./install.sh [extension-id]       ./install.sh --uninstall

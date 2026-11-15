@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
 // Chromium: the service worker can be stopped at any time, so browser-engine
 // jobs run in this offscreen document. It only has chrome.runtime: progress
 // goes to the worker as messages.

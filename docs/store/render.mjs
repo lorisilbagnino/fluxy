@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
 // Renders docs/store/src/*.html to docs/store/images/<lang>/*.png (en, it) with a headless Chromium browser
 // (DevTools protocol). Size comes from the file name (…-WxH.html), default 1280×800.
 // Usage: node docs/store/render.mjs [name-filter]      Texts: src/strings.js
