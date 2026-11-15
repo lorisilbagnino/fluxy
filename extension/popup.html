@@ -54,6 +54,11 @@
       <span><span data-i18n="autoDetect"></span>
         <small data-i18n="autoDetectHelp"></small></span>
     </label>
+    <label class="check">
+      <input id="set-rec-convert" type="checkbox">
+      <span><span data-i18n="recConvert"></span>
+        <small data-i18n="recConvertHelp"></small></span>
+    </label>
     <label><span data-i18n="prefLangs"></span>
       <input id="set-langs" type="text" placeholder="en, it" spellcheck="false">
     </label>
@@ -82,6 +87,16 @@
     </div>
     <div id="streams"></div>
     <p id="empty" class="muted" hidden></p>
+
+    <div class="section-head">
+      <h2 data-i18n="recSection"></h2>
+    </div>
+    <div class="rec-box">
+      <span class="rec-text"><span data-i18n="recBoxTitle"></span>
+        <small data-i18n="recBoxHelp"></small></span>
+      <button id="btn-rec" class="ghost" data-i18n="recButton"></button>
+    </div>
+    <div id="rec-error" class="err rec-error" hidden></div>
 
   </main>
 

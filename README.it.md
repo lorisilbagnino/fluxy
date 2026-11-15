@@ -6,7 +6,8 @@
 
 Estensione per browser Chromium e Firefox (testata su **Brave Origin 157** e **Firefox 160**) che rileva gli stream
 **HLS** e **DASH** caricati dalle pagine, ti fa scegliere qualità video, tracce audio e sottotitoli, e li salva in
-**un unico MKV o MP4 senza ricodifica**. Interfaccia in italiano e inglese (segue la lingua del browser).
+**un unico MKV o MP4 senza ricodifica**. Può anche **registrare i video WebRTC** (videochiamate, dirette) di una
+pagina. Interfaccia in italiano e inglese (segue la lingua del browser).
 
 ## Due motori (⚙ → Motore)
 
@@ -74,6 +75,38 @@ Nota Firefox: l'app va registrata in `~/.mozilla/native-messaging-hosts` anche c
 - **MKV** consigliato. **MP4**: sottotitoli `.srt` accanto al video (motore nel browser) o `mov_text` (app locale).
 - Motore nel browser: durante il lavoro serve circa **2× la dimensione del film** su disco (controllato prima di
   iniziare).
+
+## Registrare un video WebRTC
+
+1. Nel popup premi **● Registra un video**: i video della pagina (anche dentro i riquadri) vengono evidenziati.
+2. Clicca quello da registrare: compare un pannello in alto a destra. Se l'audio è riprodotto da altri elementi
+   della pagina (tipico delle videochiamate), la casella *Aggiungi l'audio degli altri elementi* li mescola nella
+   registrazione.
+3. **● Registra**, poi **■ Stop** (dal pannello o da *stop e salva* nel popup): si apre "Salva con nome" per
+   scegliere dove salvare il file. Se chiudi la finestra senza salvare, la registrazione resta nel popup con
+   *salva…* / *scarta*.
+
+Formato (⚙ → *Converti le registrazioni nel formato predefinito*, attivo di default): le registrazioni seguono il
+*Formato predefinito*.
+
+| | Come viene prodotto |
+|---|---|
+| **MKV** | il WebM registrato (VP9/VP8 + Opus) copiato in MKV, senza ricodifica |
+| **MP4** | Chromium registra direttamente in H.264 → solo copia (Opus convertito in AAC se il browser lo sa codificare); Firefox registra solo VP8 → allo stop ricodifica in H.264 + AAC con WebCodecs |
+| conversione disattivata | il `.webm` registrato dal browser |
+
+Se la conversione non riesce, il file viene salvato così come è stato registrato e il popup lo segnala.
+
+Come funziona: `MediaRecorder` registra lo stream del `<video>` (`srcObject`, oppure `captureStream()` per i video
+normali su Chromium) in pezzi da 1 s che finiscono nello spazio privato dell'estensione (OPFS). Allo stop il file
+viene riscritto con la `Conversion` di Mediabunny, che aggiunge anche durata e indici: senza, molti player non
+permettono di spostarsi nel file. Se la scheda viene chiusa durante la registrazione, quanto registrato fino a quel
+momento viene comunque proposto per il salvataggio.
+
+Limiti: la registrazione **ricodifica**: un video WebRTC arriva già decodificato, non ci sono
+pacchetti originali da copiare. Le tracce audio aggiunte dopo l'avvio (nuovi partecipanti) e i cambi di
+`srcObject` durante la registrazione non vengono seguiti. Su Firefox si registrano solo i video WebRTC
+(`mozCaptureStream` toglierebbe l'audio alla pagina).
 
 ## Debug, sistemi, limiti
 

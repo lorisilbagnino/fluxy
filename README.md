@@ -6,7 +6,8 @@
 
 Browser extension for Chromium and Firefox (tested on **Brave Origin 157** and **Firefox 160**) that detects the **HLS**
 and **DASH** streams loaded by web pages, lets you pick the video quality, audio tracks and subtitles, and saves them
-as **one MKV or MP4 without re-encoding**. Interface in English and Italian (it follows the browser's language).
+as **one MKV or MP4 without re-encoding**. It can also **record WebRTC videos** (video calls, live streams) on a
+page. Interface in English and Italian (it follows the browser's language).
 
 ## Two engines (⚙ → Engine)
 
@@ -44,6 +45,9 @@ extension/
   offscreen.*     Chromium: hidden document running runner.js (the service worker may be stopped)
                   Firefox: runner.js runs in the background page, kept awake during downloads
   popup.*         stream choice, download queue, settings, local app installation
+  recorder/       recording of a <video>
+    page.js         in the page's context (MAIN world): video picker, panel, MediaRecorder
+    bridge.js       content script: creates the job and forwards the chunks to the engine over a port
   _locales/       en, it (generated from tools/messages.py)
 host/
   fluxy_host.py   local app (native messaging, stdlib only): DASH and page analysis (yt-dlp), downloads with
@@ -144,6 +148,34 @@ If you register the app from the repository with `./host/install.sh` and then mo
   handed to the browser's download manager; about **2× the film's size** of disk space is needed meanwhile. The
   extension checks the available space before starting.
 - Local app: the file is written to a temporary `.flux-<id>` folder inside the destination and moved at the end.
+
+## Recording a WebRTC video
+
+1. In the popup press **● Record a video**: the page's videos (iframes included) are highlighted.
+2. Click the one to record: a panel appears at the top right. If the audio is played by other elements of the page
+   (typical of video calls), the *Add the audio of the page's other elements* box mixes them into the recording.
+3. **● Record**, then **■ Stop** (in the panel, or *stop and save* in the popup): "Save as" opens to choose where to
+   save the file. If you close it without saving, the recording stays in the popup with *save…* / *discard*.
+
+Format (⚙ → *Convert recordings to the default format*, on by default): recordings follow the *Default format*.
+
+| | How it's produced |
+|---|---|
+| **MKV** | the recorded WebM (VP9/VP8 + Opus) copied into MKV, no re-encoding |
+| **MP4** | Chromium records straight to H.264 → copy only (Opus converted to AAC if the browser can encode it); Firefox only records VP8 → re-encoded to H.264 + AAC with WebCodecs on stop |
+| conversion off | the `.webm` recorded by the browser |
+
+If the conversion fails, the file is saved as recorded and the popup says so.
+
+How it works: `MediaRecorder` records the `<video>`'s stream (`srcObject`, or `captureStream()` for regular videos
+on Chromium) in 1 s chunks that land in the extension's private storage (OPFS). On stop the file is rewritten with
+Mediabunny's `Conversion`, which also adds duration and indexes: without them many players can't seek. If the tab is
+closed while recording, what was recorded so far is still offered for saving. The panel runs in the page's own
+context (`recorder/page.js`, MAIN world, no `chrome.i18n`): the background passes it its localised strings first.
+
+Limits: recording **re-encodes**: a WebRTC video arrives already decoded, there are no original packets to copy.
+Audio tracks added after the start (new participants) and `srcObject` changes during the recording aren't followed.
+On Firefox only WebRTC videos can be recorded (`mozCaptureStream` would mute the page).
 
 ## Debug
 

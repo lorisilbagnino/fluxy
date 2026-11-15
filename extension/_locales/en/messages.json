@@ -264,6 +264,138 @@
   "pageCardButton": {
     "message": "Analyse with yt-dlp"
   },
+  "recConvert": {
+    "message": "Convert recordings to the default format"
+  },
+  "recConvertHelp": {
+    "message": "MKV: same tracks as the recorded WebM, no re-encoding. MP4: H.264 + AAC, recorded straight to H.264 where the browser allows it, otherwise converted on stop. When off, the browser's recorded WebM is saved."
+  },
+  "recSection": {
+    "message": "Videos on this page"
+  },
+  "recBoxTitle": {
+    "message": "Video calls and WebRTC videos"
+  },
+  "recBoxHelp": {
+    "message": "Click a video on the page and record it."
+  },
+  "recButton": {
+    "message": "● Record a video"
+  },
+  "recStopSave": {
+    "message": "stop and save"
+  },
+  "recSaveAs": {
+    "message": "save…"
+  },
+  "recDiscard": {
+    "message": "discard"
+  },
+  "recDefaultName": {
+    "message": "recording"
+  },
+  "errRestrictedPage": {
+    "message": "The browser doesn't let extensions access this page."
+  },
+  "errVideosNotRecordable": {
+    "message": "The page's videos can't be recorded: start playback and try again."
+  },
+  "errNoVideos": {
+    "message": "No video found on this page."
+  },
+  "errUnknownTab": {
+    "message": "Unknown tab"
+  },
+  "stageChooseWhere": {
+    "message": "Choose where to save"
+  },
+  "rec_pickAgain": {
+    "message": "Pick the video again from the extension's button."
+  },
+  "rec_noAnswer": {
+    "message": "The extension isn't answering"
+  },
+  "rec_notReady": {
+    "message": "The video hasn't started yet or doesn't expose its stream"
+  },
+  "rec_recordThis": {
+    "message": "● Record this video"
+  },
+  "rec_recordCapture": {
+    "message": "● Record (capture from the player)"
+  },
+  "rec_notRecordable": {
+    "message": "Can't be recorded"
+  },
+  "rec_pickBanner": {
+    "message": "Fluxy: click the video to record"
+  },
+  "rec_cancelPick": {
+    "message": "Cancel"
+  },
+  "rec_noTracks": {
+    "message": "The video has no active tracks"
+  },
+  "rec_withAudio": {
+    "message": "with audio"
+  },
+  "rec_noAudio": {
+    "message": "without audio"
+  },
+  "rec_capture": {
+    "message": "capture from the player"
+  },
+  "rec_addOthers": {
+    "message": "Add the audio of the page's other elements ($p1$)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "rec_saveHint": {
+    "message": "When you stop, choose where to save the file."
+  },
+  "rec_starting": {
+    "message": "Starting…"
+  },
+  "rec_record": {
+    "message": "● Record"
+  },
+  "rec_cancel": {
+    "message": "cancel"
+  },
+  "rec_stop": {
+    "message": "■ Stop"
+  },
+  "rec_stopping": {
+    "message": "Closing the recording…"
+  },
+  "rec_stopped": {
+    "message": "Recording finished: choose where to save the file."
+  },
+  "rec_aborted": {
+    "message": "Recording cancelled."
+  },
+  "rec_cantRecord": {
+    "message": "Can't record this video: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "rec_cantStart": {
+    "message": "Can't start the recording: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "rec_recorderError": {
+    "message": "recorder error"
+  },
   "stageQueued": {
     "message": "Queued"
   },
@@ -421,5 +553,52 @@
   },
   "eng_stageSaving": {
     "message": "Saving"
+  },
+  "eng_stageRecording": {
+    "message": "Recording"
+  },
+  "eng_stagePreparing": {
+    "message": "Preparing the file"
+  },
+  "eng_stageConverting": {
+    "message": "Converting to $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "eng_convertImpossible": {
+    "message": "Conversion to $p1$ not possible: $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "eng_writeFailed": {
+    "message": "Writing failed: $p1$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "eng_noData": {
+    "message": "Nothing was recorded"
+  },
+  "eng_convertFailed": {
+    "message": "Conversion failed, saved as $p1$: $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
   }
 }

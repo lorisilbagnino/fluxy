@@ -102,6 +102,48 @@ M = {
     "pageCardText": ("YouTube doesn't use standard HLS/DASH playlists: the local app can analyse the page with yt-dlp.",
                      "YouTube non usa playlist HLS/DASH standard: l'app locale può analizzare la pagina con yt-dlp."),
     "pageCardButton": ("Analyse with yt-dlp", "Analizza con yt-dlp"),
+    # recorder (popup)
+    "recConvert": ("Convert recordings to the default format", "Converti le registrazioni nel formato predefinito"),
+    "recConvertHelp": ("MKV: same tracks as the recorded WebM, no re-encoding. MP4: H.264 + AAC, recorded straight to H.264 where the browser allows it, otherwise converted on stop. When off, the browser's recorded WebM is saved.",
+                       "MKV: stesse tracce del WebM registrato, senza ricodifica. MP4: H.264 + AAC, registrato direttamente in H.264 dove il browser lo permette, altrimenti convertito allo stop. Se disattivo, salva il WebM registrato dal browser."),
+    "recSection": ("Videos on this page", "Video in questa pagina"),
+    "recBoxTitle": ("Video calls and WebRTC videos", "Videochiamate e video WebRTC"),
+    "recBoxHelp": ("Click a video on the page and record it.", "Clicca un video della pagina e registralo."),
+    "recButton": ("● Record a video", "● Registra un video"),
+    "recStopSave": ("stop and save", "stop e salva"),
+    "recSaveAs": ("save…", "salva…"),
+    "recDiscard": ("discard", "scarta"),
+    # recorder (background, bridge, page panel)
+    "recDefaultName": ("recording", "registrazione"),
+    "errRestrictedPage": ("The browser doesn't let extensions access this page.", "Il browser non permette alle estensioni di accedere a questa pagina."),
+    "errVideosNotRecordable": ("The page's videos can't be recorded: start playback and try again.", "I video della pagina non si possono registrare: avvia la riproduzione e riprova."),
+    "errNoVideos": ("No video found on this page.", "Nessun video trovato in questa pagina."),
+    "errUnknownTab": ("Unknown tab", "Scheda sconosciuta"),
+    "stageChooseWhere": ("Choose where to save", "Scegli dove salvare"),
+    "rec_pickAgain": ("Pick the video again from the extension's button.", "Scegli di nuovo il video dal pulsante dell'estensione."),
+    "rec_noAnswer": ("The extension isn't answering", "L'estensione non risponde"),
+    "rec_notReady": ("The video hasn't started yet or doesn't expose its stream", "Il video non è ancora partito o non espone il suo flusso"),
+    "rec_recordThis": ("● Record this video", "● Registra questo video"),
+    "rec_recordCapture": ("● Record (capture from the player)", "● Registra (cattura dal player)"),
+    "rec_notRecordable": ("Can't be recorded", "Non registrabile"),
+    "rec_pickBanner": ("Fluxy: click the video to record", "Fluxy: clicca il video da registrare"),
+    "rec_cancelPick": ("Cancel", "Annulla"),
+    "rec_noTracks": ("The video has no active tracks", "Il video non ha tracce attive"),
+    "rec_withAudio": ("with audio", "con audio"),
+    "rec_noAudio": ("without audio", "senza audio"),
+    "rec_capture": ("capture from the player", "cattura dal player"),
+    "rec_addOthers": ("Add the audio of the page's other elements ($1)", "Aggiungi l'audio degli altri elementi della pagina ($1)"),
+    "rec_saveHint": ("When you stop, choose where to save the file.", "Allo stop scegli dove salvare il file."),
+    "rec_starting": ("Starting…", "Avvio…"),
+    "rec_record": ("● Record", "● Registra"),
+    "rec_cancel": ("cancel", "annulla"),
+    "rec_stop": ("■ Stop", "■ Stop"),
+    "rec_stopping": ("Closing the recording…", "Chiudo la registrazione…"),
+    "rec_stopped": ("Recording finished: choose where to save the file.", "Registrazione terminata: scegli dove salvare il file."),
+    "rec_aborted": ("Recording cancelled.", "Registrazione annullata."),
+    "rec_cantRecord": ("Can't record this video: $1", "Impossibile registrare questo video: $1"),
+    "rec_cantStart": ("Can't start the recording: $1", "Impossibile avviare la registrazione: $1"),
+    "rec_recorderError": ("recorder error", "errore del registratore"),
     # background
     "stageQueued": ("Queued", "In coda"),
     "stageDone": ("Completed", "Completato"),
@@ -140,6 +182,13 @@ M = {
     "eng_stageSubs": ("Subtitles", "Sottotitoli"),
     "eng_stageMux": ("Merging into one file", "Unione in un unico file"),
     "eng_stageSaving": ("Saving", "Salvataggio"),
+    "eng_stageRecording": ("Recording", "Registrazione"),
+    "eng_stagePreparing": ("Preparing the file", "Preparo il file"),
+    "eng_stageConverting": ("Converting to $1", "Converto in $1"),
+    "eng_convertImpossible": ("Conversion to $1 not possible: $2", "Conversione in $1 non possibile: $2"),
+    "eng_writeFailed": ("Writing failed: $1", "Scrittura non riuscita: $1"),
+    "eng_noData": ("Nothing was recorded", "Nessun dato registrato"),
+    "eng_convertFailed": ("Conversion failed, saved as $1: $2", "Conversione non riuscita, salvato come $1: $2"),
 }
 
 
@@ -159,7 +208,8 @@ def write(ext_dir: Path):
         (d / "messages.json").write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-ENGINE_KEYS = [k for k in M if k.startswith("eng_")] + ["stageCancelled", "stageError"]
+ENGINE_KEYS = [k for k in M if k.startswith("eng_")] + ["stageCancelled", "stageError", "stageChooseWhere"]
+REC_PAGE_KEYS = [k for k in M if k.startswith("rec_")]
 
 if __name__ == "__main__":
     write(Path(__file__).resolve().parent.parent / "extension")

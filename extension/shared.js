@@ -9,6 +9,7 @@ export const DEFAULT_SETTINGS = {
   engine: 'browser',          // 'browser' = everything in the extension, 'native' = ffmpeg + yt-dlp via the local app
   outputDir: '~/Downloads',   // native engine only (the browser engine saves to the browser's download folder)
   container: 'mkv', langs: [...new Set([uiLang, 'en'])].join(', '), fragments: 8, autoDetect: false,
+  recConvert: true,           // recordings: rewrite into `container` (MKV/MP4) instead of keeping MediaRecorder's WebM
 };
 
 export function stripQuery(u) {
