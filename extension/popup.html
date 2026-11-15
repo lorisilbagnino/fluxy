@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Flux Capacitor</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="icons/icon32.png" alt="" width="24" height="24">
+    <h1>Flux Capacitor</h1>
+    <span id="host-status" class="pill" title="Stato del programma locale">…</span>
+    <button id="btn-settings" class="icon-btn" title="Impostazioni" aria-label="Impostazioni">⚙</button>
+  </header>
+
+  <section id="host-warning" class="notice" hidden></section>
+
+  <section id="settings" class="panel" hidden>
+    <label>Cartella di destinazione
+      <input id="set-dir" type="text" spellcheck="false">
+    </label>
+    <div class="row">
+      <label>Formato predefinito
+        <select id="set-container"><option value="mkv">MKV</option><option value="mp4">MP4</option></select>
+      </label>
+      <label>Download in parallelo
+        <input id="set-fragments" type="number" min="1" max="32">
+      </label>
+    </div>
+    <label class="check">
+      <input id="set-auto" type="checkbox">
+      <span>Rilevamento automatico su tutte le schede
+        <small>Se disattivo, l'estensione non osserva la rete finché non premi “Rileva” su una scheda.</small></span>
+    </label>
+    <label>Lingue preferite (preselezionate)
+      <input id="set-langs" type="text" placeholder="it, en" spellcheck="false">
+    </label>
+  </section>
+
+  <main>
+    <div class="section-head" id="jobs-head" hidden>
+      <h2>Download</h2>
+      <button id="btn-clear-jobs" class="link">rimuovi completati</button>
+    </div>
+    <div id="jobs"></div>
+
+    <div class="section-head">
+      <h2>Stream in questa scheda</h2>
+      <button id="btn-clear-tab" class="link" title="Svuota l'elenco">svuota</button>
+    </div>
+    <div id="detect" class="detect" hidden>
+      <span id="detect-text"></span>
+      <button id="btn-stop" class="link" hidden>ferma</button>
+      <button id="btn-detect" class="ghost" title="Ricarica la pagina e intercetta gli stream che il player carica">⟳ Rileva</button>
+    </div>
+    <div id="streams"></div>
+    <p id="empty" class="muted" hidden></p>
+
+  </main>
+
+  <template id="tpl-stream">
+    <article class="card">
+      <div class="card-head">
+        <span class="kind"></span>
+        <span class="meta muted"></span>
+        <button class="link copy-url" title="Copia l'URL del manifest">copia URL</button>
+      </div>
+      <div class="body"></div>
+    </article>
+  </template>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
