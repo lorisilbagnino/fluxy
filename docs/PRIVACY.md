@@ -6,6 +6,10 @@
 
 ## Cosa fa Fluxy con i dati
 
+- **Video della pagina.** Quando apri il popup, Fluxy legge la scheda attiva (comprese le sue cornici) per trovare
+  i video che si possono salvare senza avviarli: elementi `<video>`, link a file video, metadati della pagina,
+  indirizzi di playlist nella configurazione del player e player incorporati di altri siti. Conserva solo questi
+  indirizzi e il titolo, nella memoria di sessione; non legge altro della pagina e non lo invia a nessuno.
 - **Rilevamento degli stream.** Quando premi "Rileva" su una scheda (o se attivi il rilevamento automatico),
   l'estensione osserva le richieste di rete di quella scheda per riconoscere le playlist video (HLS `.m3u8`, DASH
   `.mpd`). Insieme all'indirizzo della playlist conserva gli header che il player ha usato (Referer, Origin, Cookie,
@@ -24,7 +28,8 @@
 
 - Non invia dati allo sviluppatore né a terzi: non ci sono server di Fluxy, statistiche d'uso, pubblicità o
   tracciamento.
-- Non legge il contenuto delle pagine e non registra la cronologia di navigazione.
+- Non legge il contenuto delle pagine (a parte gli indirizzi dei video, come descritto sopra) e non registra la
+  cronologia di navigazione.
 - Non vende né condivide dati.
 
 ## Contatti
@@ -39,6 +44,10 @@ Per domande: apri una segnalazione nel repository del progetto.
 
 **In short: Fluxy does not collect, store or send anyone personal data or data about your browsing.**
 
+- **Videos on the page.** When you open the popup, Fluxy reads the active tab (including its frames) to find videos
+  that can be saved without playing them: `<video>` elements, links to video files, page metadata, playlist addresses
+  in the player's configuration and embedded players of other sites. It keeps only those addresses and the title, in
+  session storage; it reads nothing else from the page and sends it to no one.
 - **Stream detection.** When you press "Detect" on a tab (or turn on automatic detection), the extension watches
   that tab's network requests to recognise video playlists (HLS `.m3u8`, DASH `.mpd`). Along with the playlist
   address it keeps the headers the player used (Referer, Origin, Cookie, Authorization), because the video server
@@ -50,7 +59,7 @@ Per domande: apri una segnalazione nel repository del progetto.
 - **Local app (optional).** If you install it, the extension passes it the same data (stream addresses and headers)
   to run the download on your computer. It keeps a log in `~/.cache/fluxy/host.log` with cookies and Authorization
   redacted.
-- Fluxy has no servers, analytics, ads or tracking; it does not read page content, record browsing history, or sell
+- Fluxy has no servers, analytics, ads or tracking; it does not read page content (other than the video addresses described above), record browsing history, or sell
   or share any data.
 
 Questions: open an issue in the project repository.

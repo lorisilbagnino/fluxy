@@ -57,7 +57,37 @@
     "message": "clear finished"
   },
   "streamsInTab": {
-    "message": "Streams in this tab"
+    "message": "Videos on this page"
+  },
+  "otherVideos": {
+    "message": "Other videos ($p1$): previews, animated backgrounds, short clips",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "hintAdaptive": {
+    "message": "$p1$ video(s) on the page use an adaptive player: if the one you want isn't listed, press “Detect” and start it.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "hintDrm": {
+    "message": "$p1$ video(s) on the page are DRM protected and can't be saved.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "embedText": {
+    "message": "Player embedded from another site: the local app can analyse it with yt-dlp."
+  },
+  "fileOriginal": {
+    "message": "original file, saved as is"
   },
   "clear": {
     "message": "clear"
@@ -429,5 +459,8 @@
   },
   "eng_stageSaving": {
     "message": "Saving"
+  },
+  "eng_badRange": {
+    "message": "The server doesn't honour partial downloads: try again"
   }
 }

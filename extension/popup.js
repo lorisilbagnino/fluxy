@@ -25,6 +25,7 @@ const selection = {};          // streamId -> {videoId, audioIds:Set, subIds:Set
 let lastStreamsSig = '';
 let armedTabs = [];
 let lastStreams = [];
+let lastScan = null;       // {blobVideos, drmVideos} from the page scan
 
 // ------------------------------------------------------------ formatting ---
 const langNames = (() => {
@@ -150,7 +151,7 @@ function initSelection(stream) {
     videoId: d.video[0]?.id || null,
     audioIds, subIds,
     container: settings.container || 'mkv',
-    filename: cleanTitle(tabTitle || stream.title),
+    filename: cleanTitle((stream.from === 'scan' && stream.title) || tabTitle || stream.title),
   };
   return selection[stream.id];
 }
@@ -273,8 +274,12 @@ function renderStreams(streams, force = false) {
 
   const kids = childSet(streams);
   const visible = streams.filter((s) => !isChild(s, kids));
-  // master playlists first, then newest
-  visible.sort((a, b) => ((b.probe?.data?.master ? 1 : 0) - (a.probe?.data?.master ? 1 : 0)) || (b.detectedAt - a.detectedAt));
+  // streams (analysed masters first), then page videos (visible, big, long first), then embedded players
+  const rank = (s) => (s.kind === 'hls' || s.kind === 'dash' ? (s.probe?.data?.master ? 5 : 4) : s.kind === 'file' ? 3 : s.kind === 'page' && !s.embed ? 4 : 1);
+  const weight = (s) => (s.media?.visible ? 1e12 : 0) + (s.media?.area || 0) * 1e3 + (s.media?.duration || s.probe?.data?.duration || 0);
+  visible.sort((a, b) => (rank(b) - rank(a)) || (weight(b) - weight(a)) || (b.detectedAt - a.detectedAt));
+  const main = visible.filter((s) => !isDecorative(s));
+  const noise = visible.filter(isDecorative);
 
   $('#empty').hidden = visible.length > 0;
   $('#empty').textContent = isBlockedUrl(tabUrl)
@@ -287,14 +292,80 @@ function renderStreams(streams, force = false) {
   const box = $('#streams');
   // keep focus on filename input across re-renders
   const focused = document.activeElement?.dataset?.focusKey;
-  box.replaceChildren(...visible.map(renderStream));
+  const wasOpen = box.querySelector('details.noise')?.open;
+  box.replaceChildren(...main.map(renderStream),
+    ...(noise.length ? [el('details', { class: 'noise', open: !!wasOpen || !main.length },
+      el('summary', {}, t('otherVideos', noise.length)), ...noise.map(renderStream))] : []));
   if (focused) box.querySelector(`[data-focus-key="${focused}"]`)?.focus();
+  renderHint(visible);
+}
+
+/** Background loops, muted autoplay previews, tiny or very short clips: listed, but folded away. */
+function isDecorative(s) {
+  const m = s.media;
+  if (s.kind !== 'file' || !m || m.via) return false;
+  if (m.muted && (m.loop || m.autoplay) && !m.controls) return true;
+  if (m.duration != null && m.duration > 0 && m.duration < 12) return true;
+  if (m.tag === 'video' && (!m.visible || (m.area && m.area < 200 * 112))) return true;
+  return false;
+}
+
+function renderHint(visible) {
+  const hasStream = visible.some((s) => s.kind === 'hls' || s.kind === 'dash');
+  const parts = [];
+  if (lastScan?.blobVideos && !hasStream) parts.push(t('hintAdaptive', lastScan.blobVideos));
+  if (lastScan?.drmVideos) parts.push(t('hintDrm', lastScan.drmVideos));
+  $('#scan-hint').hidden = !parts.length;
+  $('#scan-hint').textContent = parts.join(' ');
+}
+
+const EMBED_NAMES = { 'youtube.com': 'YouTube', 'youtube-nocookie.com': 'YouTube', 'vimeo.com': 'Vimeo', 'dailymotion.com': 'Dailymotion',
+  'twitch.tv': 'Twitch', 'streamable.com': 'Streamable', 'rumble.com': 'Rumble', 'facebook.com': 'Facebook', 'bilibili.com': 'Bilibili',
+  'wistia.net': 'Wistia', 'wistia.com': 'Wistia', 'loom.com': 'Loom', 'soundcloud.com': 'SoundCloud' };
+const embedName = (u) => {
+  try { const h = new URL(u).hostname; return Object.entries(EMBED_NAMES).find(([d]) => h === d || h.endsWith(`.${d}`))?.[1] || h; } catch { return 'embed'; }
+};
+
+/** Card body of a direct file: choice of the available qualities, saved as is. */
+function renderFileBody(s, d, body) {
+  const sel = initSelection(s);
+  if (s.title) body.append(el('div', { class: 'file-title', title: s.title }, s.title));
+  body.append(el('div', {}, el('div', { class: 'group-title' }, d.audioOnly ? t('audio') : t('video')),
+    el('div', { class: 'opts' }, d.video.map((v) => el('label', { class: 'opt' },
+      el('input', { type: 'radio', name: `v-${s.id}`, checked: sel.videoId === v.id, onchange: () => { sel.videoId = v.id; } }),
+      el('span', { class: 'main' }, v.height ? `${v.height}p` : (v.label || v.ext.toUpperCase())),
+      el('span', { class: 'tag' }, [v.label && v.height ? v.label : null, v.ext.toUpperCase(), v.size ? fmtSize(v.size) : null].filter(Boolean).join(' · ')),
+    )))));
+  const dlError = el('div', { class: 'err', hidden: true });
+  const download = el('button', {
+    class: 'primary',
+    onclick: async () => {
+      download.disabled = true;
+      const r = await send({ type: 'download', tabId, streamId: s.id, videoId: sel.videoId, audioIds: [], subIds: [], filename: sel.filename.trim() || 'video' });
+      dlError.textContent = r?.error || '';
+      dlError.hidden = !r?.error;
+      download.disabled = false;
+    },
+  }, t('download'));
+  const ext = () => (d.video.find((v) => v.id === sel.videoId) || d.video[0])?.ext || '';
+  body.append(dlError, el('div', { class: 'actions' },
+    el('input', { type: 'text', value: sel.filename, title: t('fileName'), 'data-focus-key': `fn-${s.id}`, oninput: (e) => { sel.filename = e.target.value; } }),
+    el('span', { class: 'file-ext', title: t('fileOriginal') }, `.${ext()}`),
+    download));
+}
+
+function fmtSize(b) {
+  const fmt = (n, dg) => n.toLocaleString(UI_LANG, { minimumFractionDigits: dg, maximumFractionDigits: dg });
+  return b >= 1073741824 ? `${fmt(b / 1073741824, 2)} GB` : `${fmt(Math.max(0.1, b / 1048576), 1)} MB`;
 }
 
 function renderStream(s) {
   const card = $('#tpl-stream').content.firstElementChild.cloneNode(true);
   translate(card);
-  $('.kind', card).textContent = s.kind === 'page' ? (s.probe?.data?.extractor || 'yt-dlp').toUpperCase() : s.kind.toUpperCase();
+  const d0 = s.probe?.data;
+  $('.kind', card).textContent = s.kind === 'page' ? (d0?.extractor || (s.embed ? embedName(s.url) : 'yt-dlp')).toUpperCase()
+    : s.kind === 'file' ? (d0?.audioOnly ? 'AUDIO' : (d0?.video?.[0]?.ext || 'file').toUpperCase())
+    : s.kind.toUpperCase();
   let host = '';
   try { host = new URL(s.url).hostname; } catch {}
   const d = s.probe?.data;
@@ -306,6 +377,11 @@ function renderStream(s) {
   });
   const body = $('.body', card);
 
+  if (s.manual && !s.probe) {
+    body.append(el('div', { class: 'muted' }, t('embedText')),
+      el('div', {}, el('button', { class: 'ghost', onclick: () => send({ type: 'probe', tabId, streamId: s.id }) }, t('pageCardButton'))));
+    return card;
+  }
   if (!s.probe || s.probe.status === 'loading') {
     body.append(el('div', { class: 'loading' }, el('span', { class: 'spinner' }), t('analysing')));
     if (!s.probe) send({ type: 'probe', tabId, streamId: s.id });
@@ -324,6 +400,7 @@ function renderStream(s) {
     body.append(el('div', { class: 'drm' }, t('drmProtected', d.drm)));
     return card;
   }
+  if (d.kind === 'file') { renderFileBody(s, d, body); return card; }
 
   const sel = initSelection(s);
   const update = () => { download.disabled = !sel.videoId && sel.audioIds.size === 0; };
@@ -512,12 +589,13 @@ async function init() {
   armedTabs = data.armed || [];
   renderDetect();
   renderHost(data.host);
+  lastScan = data[key]?.scan || null;
   renderStreams(data[key]?.streams || []);
   renderJobs(data.jobs);
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'session') return;
-    if (changes[key]) renderStreams(changes[key].newValue?.streams || []);
+    if (changes[key]) { lastScan = changes[key].newValue?.scan || null; renderStreams(changes[key].newValue?.streams || []); }
     if (changes.jobs) renderJobs(changes.jobs.newValue);
     if (changes.host) renderHost(changes.host.newValue);
     if (changes.armed) {
@@ -537,6 +615,8 @@ async function init() {
   });
   $('#btn-stop').addEventListener('click', () => send({ type: 'disarm', tabId }));
   $('#btn-clear-jobs').addEventListener('click', () => send({ type: 'clearFinished' }));
+  // Videos in the page itself (no playback needed): scanned every time the popup opens.
+  send({ type: 'scan', tabId });
   // The local app is only started when it is the chosen engine (or the settings are opened).
   if (settings.engine === 'native') send({ type: 'hostCheck' });
 }

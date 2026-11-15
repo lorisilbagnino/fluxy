@@ -57,7 +57,37 @@
     "message": "rimuovi completati"
   },
   "streamsInTab": {
-    "message": "Stream in questa scheda"
+    "message": "Video in questa pagina"
+  },
+  "otherVideos": {
+    "message": "Altri video ($p1$): anteprime, sfondi animati, clip brevi",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "hintAdaptive": {
+    "message": "$p1$ video della pagina usano un player adattivo: se quello che cerchi non è in elenco, premi “Rileva” e avvialo.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "hintDrm": {
+    "message": "$p1$ video della pagina sono protetti da DRM e non si possono salvare.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "embedText": {
+    "message": "Player incorporato da un altro sito: l'app locale può analizzarlo con yt-dlp."
+  },
+  "fileOriginal": {
+    "message": "file originale, salvato così com'è"
   },
   "clear": {
     "message": "svuota"
@@ -429,5 +459,8 @@
   },
   "eng_stageSaving": {
     "message": "Salvataggio"
+  },
+  "eng_badRange": {
+    "message": "Il server non rispetta i download a pezzi: riprova"
   }
 }

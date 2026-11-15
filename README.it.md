@@ -75,6 +75,16 @@ Nota Firefox: l'app va registrata in `~/.mozilla/native-messaging-hosts` anche c
 
 ## Rilevamento
 
+**Senza far partire nulla.** Ogni volta che apri il popup, Fluxy legge la scheda attiva (`extension/scanner.js`, in
+tutte le cornici, in sola lettura) ed elenca i video salvabili subito: file di `<video>`/`<source>`, link a `.mp4`/
+`.webm`, `og:video` e JSON-LD (file diretti, salvati così come sono, a pezzi in parallelo se il server lo permette);
+URL `.m3u8`/`.mpd` nella configurazione del player (schede stream come al solito); iframe di YouTube, Vimeo,
+Dailymotion, Twitch… (*Analizza con yt-dlp*, app locale). Per i video con player adattivo (`blob:`) o DRM compare
+un avviso. Tutto finisce in un'unica lista, *Video in questa pagina*; sfondi animati, anteprime mute in loop e clip
+brevissime vanno in *Altri video*, chiusi. I player che creano l'indirizzo del video solo al play si trovano ancora
+con *Rileva*.
+
+
 - **Manuale (predefinito)**: premi *Rileva* sulla scheda; la pagina si ricarica e Fluxy ascolta solo quella scheda
   finché non premi *ferma* o la chiudi.
 - **Automatico** (⚙): osserva tutte le schede; comodo, ma sveglia il service worker a ogni richiesta.

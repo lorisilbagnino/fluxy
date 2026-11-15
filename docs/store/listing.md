@@ -44,6 +44,7 @@ Molti siti trasmettono i video in streaming adattivo (HLS o DASH): il video, ogn
 sottotitolo arrivano come flussi separati, spezzati in centinaia di segmenti. Fluxy li trova, ti fa scegliere
 cosa tenere e li ricompone in un unico file pronto per qualsiasi player.
 
+• Trova anche i video della pagina che non hai ancora avviato: file MP4/WebM, link, player incorporati.
 • Scegli la qualità del video, fino alla più alta che il sito offre.
 • Scegli le tracce audio per lingua: anche più di una nello stesso file.
 • Scegli i sottotitoli per lingua, compresi quelli "forced".
@@ -91,6 +92,7 @@ Many sites deliver video as adaptive streams (HLS or DASH): the picture, each au
 arrive as separate streams, split into hundreds of segments. Fluxy finds them, lets you choose what to keep and
 puts them back together into a single file that plays anywhere.
 
+• Also finds the page's videos you haven't started yet: MP4/WebM files, links, embedded players.
 • Pick the video quality, up to the highest the site offers.
 • Pick audio tracks by language, several in the same file if you like.
 • Pick subtitles by language, including "forced" ones.
@@ -134,6 +136,7 @@ Fluxy is free. If you find it useful, you can buy me a coffee: https://ko-fi.com
 
 | Permesso | Giustificazione (da incollare) |
 |---|---|
+| `scripting` | When the user opens the popup, reads the active tab (and its frames) to list the videos that can be saved without playing them: `<video>` sources, links to video files, og:video / JSON-LD metadata, playlist URLs in player configurations, embedded players. Read-only: nothing is modified on the page. |
 | `webRequest` | Detects the HLS/DASH playlists (.m3u8/.mpd) requested by the page's player, and the request headers (Referer, Origin, Cookie) the server expects. By default only on the tab where the user pressed "Detect". |
 | `host_permissions: <all_urls>` | Video streams are served from arbitrary CDN hosts that cannot be known in advance; the extension must fetch playlists and segments from them. |
 | `declarativeNetRequestWithHostAccess` | Adds the page's Referer/Origin/Cookie headers to the extension's own requests for the stream, which CDNs require. Session rules limited to the stream's hosts and removed when the download ends. |

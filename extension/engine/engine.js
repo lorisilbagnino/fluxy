@@ -88,6 +88,65 @@ function sniff(u8) {
 
 // ------------------------------------------------------------- download ----
 /** Downloads one rendition into an OPFS file. Returns {file, kind, startPts}. */
+/**
+ * Downloads a direct file (MP4, WebM…) into OPFS. With range support and a known size it fetches
+ * CHUNK-sized pieces in parallel and writes them in order; otherwise it streams the single response.
+ */
+const CHUNK = 8 << 20;
+export async function downloadFile(url, { dir, name, fetchOpts, parallel = 6, size, ranges, onProgress, ensureHosts }) {
+  const signal = fetchOpts?.signal;
+  await ensureHosts?.([url]);
+  const fh = await dir.getFileHandle(name, { create: true });
+  const w = await fh.createWritable();
+  let bytes = 0;
+  try {
+    if (ranges && size > CHUNK) {
+      const count = Math.ceil(size / CHUNK);
+      const done = new Map();
+      let next = 0, written = 0, writing = Promise.resolve();
+      const flush = () => (writing = writing.then(async () => {
+        while (done.has(written)) {
+          const d = done.get(written); done.delete(written);
+          await w.write(d); bytes += d.length; written++;
+          onProgress?.({ bytes, total: size });
+        }
+      }));
+      const worker = async () => {
+        while (next < count) {
+          if (signal?.aborted) throw new CancelledError();
+          if (next - written > parallel * 2) { await writing; await new Promise((r) => setTimeout(r, 20)); continue; }
+          const i = next++;
+          const start = i * CHUNK, end = Math.min(size, start + CHUNK);
+          const d = await fetchBytes(url, { ...fetchOpts, headers: { ...fetchOpts?.headers, Range: `bytes=${start}-${end - 1}` } });
+          // a server that ignores Range sends the whole file every time: refuse to mix it up
+          if (d.length !== end - start) throw new Error(m('eng_badRange'));
+          done.set(i, d);
+          await flush();
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(parallel, count) }, worker));
+      await writing;
+    } else {
+      const r = await fetch(url, { credentials: 'include', ...fetchOpts });
+      if (!r.ok) throw new Error(m('eng_http', `HTTP ${r.status}`, new URL(url).hostname));
+      const total = size || parseInt(r.headers.get('content-length') || '', 10) || 0;
+      const reader = r.body.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await w.write(value); bytes += value.length;
+        onProgress?.({ bytes, total });
+      }
+    }
+  } catch (e) {
+    await w.abort().catch(() => {});
+    if (signal?.aborted || e.name === 'AbortError') throw new CancelledError();
+    throw e;
+  }
+  await w.close();
+  return fh.getFile();
+}
+
 export async function downloadTrack(url, { dir, name, fetchOpts, parallel = 8, onProgress, ensureHosts }) {
   const signal = fetchOpts?.signal;
   await ensureHosts?.([url]);

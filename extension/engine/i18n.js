@@ -7,7 +7,7 @@
 export const ENGINE_KEYS = [
   'eng_cancelled', 'eng_http', 'eng_httpDenied', 'eng_unsupportedEnc', 'eng_notHls', 'eng_emptyPlaylist',
   'eng_unknownSegments', 'eng_noTrack', 'eng_nothingToMux', 'eng_noSpace', 'eng_stageDownload1',
-  'eng_stageDownloadN', 'eng_stageSubs', 'eng_stageMux', 'eng_stageSaving', 'stageCancelled', 'stageError',
+  'eng_stageDownloadN', 'eng_stageSubs', 'eng_stageMux', 'eng_stageSaving', 'stageCancelled', 'stageError', 'eng_badRange',
 ];
 
 let table = null;

@@ -135,6 +135,20 @@ at `~/.mozilla/firefox`.
 
 ## Detection: manual or automatic
 
+**Without playing anything.** Every time the popup opens, Fluxy reads the active tab (`extension/scanner.js`, all
+frames, read-only) and lists the videos that can be saved right away:
+
+| Found in the page | Result |
+|---|---|
+| `<video>` / `<source>` files, links to `.mp4`/`.webm`/…, `og:video`, JSON-LD `VideoObject` | direct file: choose the quality, saved as is (parallel ranged download when the server allows it) |
+| `.m3u8`/`.mpd` URLs in the player's configuration (inline scripts, `data-*` attributes) | stream card, analysed as usual |
+| iframes of YouTube, Vimeo, Dailymotion, Twitch… | *Analyse with yt-dlp* (local app) |
+| videos played through MSE (`blob:`) or DRM | a hint: press *Detect* and start the video / protected |
+
+Everything lands in one list, *Videos on this page*: streams first, then the visible, bigger and longer videos, then
+embedded players. Background loops, muted autoplay previews and very short or tiny clips are folded into *Other
+videos*. A player that builds its video URL only when you press play is still found by *Detect*.
+
 - **Manual (default)**: the extension doesn't watch the network until you press *Detect* on a tab; from then on it
   listens to that tab only (also after navigating) until you press *stop* or close it. The page is reloaded because
   the player has usually fetched its playlist before you open the popup.
