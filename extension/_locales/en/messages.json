@@ -318,7 +318,10 @@
     "message": "Stream not analysed"
   },
   "errPickOne": {
-    "message": "Select at least one video or audio stream"
+    "message": "Select at least one video, audio or subtitle track"
+  },
+  "srtTitle": {
+    "message": "Download only this subtitle track, as an .srt file"
   },
   "errNeedsHost": {
     "message": "This stream needs the local app (ffmpeg + yt-dlp): install it from ⚙ → Engine."

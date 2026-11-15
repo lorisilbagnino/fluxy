@@ -29,7 +29,7 @@ import traceback
 import urllib.parse
 import urllib.request
 
-VERSION = "0.6.1"
+VERSION = "0.6.2"
 CACHE_DIR = os.path.join(os.path.expanduser("~/.cache"), "fluxy")
 LOG_FILE = os.path.join(CACHE_DIR, "host.log")
 UA_FALLBACK = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -584,6 +584,25 @@ def install_hints(env: dict) -> dict:
     return {"cryptodome": crypto, "tools": tools}
 
 
+SRT_JUNK_RE = re.compile(r"^(WEBVTT\b.*|X-TIMESTAMP-MAP=.*|NOTE\b.*|STYLE)$")
+
+
+def clean_srt(path: str):
+    """ffmpeg reading segmented WebVTT: when a segment's last cue has no blank line after it, the next
+    segment's header ("WEBVTT", "X-TIMESTAMP-MAP=...") ends up in the cue text. Drop those lines."""
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        blocks = fh.read().replace("\r\n", "\n").split("\n\n")
+    out = []
+    for b in blocks:
+        lines = [l for l in b.split("\n") if not SRT_JUNK_RE.match(l.strip())]
+        if len(lines) >= 3 or (len(lines) == 2 and "-->" in lines[1]):
+            out.append("\n".join(lines).strip("\n"))
+    for i, b in enumerate(out, 1):   # renumber
+        out[i - 1] = re.sub(r"^\d+\n", f"{i}\n", b, count=1)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("\n\n".join(out) + "\n")
+
+
 class Cancelled(Exception):
     pass
 
@@ -776,8 +795,28 @@ class Job:
                           "-c:s", "srt", dst])
                 if not os.path.exists(dst) or os.path.getsize(dst) == 0:
                     raise RuntimeError(T("{lang} subtitles are empty", lang=sub.get("lang")))
+                clean_srt(dst)
             sub_files.append((sub, dst))
             done_w += 20_000
+
+        # ---- subtitles only: one .srt per track next to each other -------------
+        if not files:
+            stem = safe_filename(s.get("filename") or s.get("title") or "video")
+            saved, seen = [], set()
+            for sub, path in sub_files:
+                ext = f"{(sub.get('lang') or '').lower()}.srt" if lang3(sub.get("lang")) != "und" else "srt"
+                if sub.get("forced"):
+                    ext = ext[:-3] + "forced.srt"
+                k = 2
+                while ext in seen:
+                    ext = re.sub(r"(\.\d+)?\.srt$", f".{k}.srt", ext); k += 1
+                seen.add(ext)
+                dst = unique_path(os.path.join(out_dir, f"{stem}.{ext}"))
+                shutil.move(path, dst)
+                saved.append(dst)
+            if not saved:
+                raise RuntimeError(T("{lang} subtitles are empty", lang=""))
+            return saved[0]
 
         # ---- mux ----------------------------------------------------------
         title = s.get("title") or "video"

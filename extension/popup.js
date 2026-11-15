@@ -403,7 +403,7 @@ function renderStream(s) {
   if (d.kind === 'file') { renderFileBody(s, d, body); return card; }
 
   const sel = initSelection(s);
-  const update = () => { download.disabled = !sel.videoId && sel.audioIds.size === 0; };
+  const update = () => { download.disabled = !sel.videoId && sel.audioIds.size === 0 && sel.subIds.size === 0; };
 
   if (d.live) body.append(el('div', { class: 'err' }, t('liveStream')));
   if (d.encryption) body.append(el('div', { class: 'muted' }, t('encryptionOk', d.encryption)));
@@ -456,11 +456,19 @@ function renderStream(s) {
       el('div', { class: 'opts' }, d.subs.map((tr) => el('label', { class: 'opt' },
         el('input', {
           type: 'checkbox', checked: sel.subIds.has(tr.id),
-          onchange: (e) => { e.target.checked ? sel.subIds.add(tr.id) : sel.subIds.delete(tr.id); },
+          onchange: (e) => { e.target.checked ? sel.subIds.add(tr.id) : sel.subIds.delete(tr.id); update(); },
         }),
         el('span', { class: 'main' }, langLabel(tr.lang),
           !nameIsJustLang(tr.name, tr.lang) ? el('span', { class: 'muted' }, ` — ${tr.name}`) : null,
           tr.forced ? el('span', { class: 'badge' }, t('forced')) : null),
+        el('button', {
+          class: 'link srt', title: t('srtTitle'),
+          onclick: async (e) => {
+            e.preventDefault();   // inside the <label>: don't toggle the checkbox
+            const r = await send({ type: 'download', tabId, streamId: s.id, videoId: null, audioIds: [], subIds: [tr.id], filename: sel.filename.trim() || 'video' });
+            dlError.textContent = r?.error || ''; dlError.hidden = !r?.error;
+          },
+        }, '.srt'),
       ))),
     ));
   }

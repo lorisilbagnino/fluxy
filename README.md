@@ -165,6 +165,9 @@ If you register the app from the repository with `./host/install.sh` and then mo
 - **Video**: the highest quality is preselected. "audio included" = that variant already carries audio.
 - **Audio / Subtitles**: the preferred languages are preselected (⚙ → *Preferred languages*, default: the browser's
   language and English), one audio track per language.
+- **Subtitles only**: each subtitle row has an **.srt** link that saves just that track; with no video and no audio
+  selected, *Download* saves every selected subtitle as its own `.srt` ("Film.it.srt", "Film.it.forced.srt", …),
+  timed from the start of the video.
 - **MKV** (recommended) takes everything. **MP4**: subtitles as `.srt` next to the video (in-browser engine) or
   `mov_text` (local app).
 - In-browser engine: segments are written to the extension's private storage (OPFS), merged, and the final file is
