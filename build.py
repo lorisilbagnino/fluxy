@@ -101,7 +101,8 @@ def main():
     import messages   # noqa: E402  (tools/messages.py: the UI strings)
     messages.write(SRC)
     sync_native()
-    DIST.mkdir(exist_ok=True)
+    shutil.rmtree(DIST, ignore_errors=True)   # only the current version's packages
+    DIST.mkdir()
     targets = (
         ("chromium", chromium_manifest, "zip", False),
         ("firefox", firefox_manifest, "xpi", False),
