@@ -137,14 +137,40 @@ function initSelection(stream) {
 }
 
 // ---------------------------------------------------------------- render ---
-function renderHost(host) {
+let hostState = null;
+
+function renderHost(host = hostState) {
+  hostState = host;
+  const native = settings.engine === 'native';
   const pill = $('#host-status');
   const warn = $('#host-warning');
+  const txt = $('#native-text');
   warn.hidden = true;
   warn.classList.remove('soft');
-  if (!host) { pill.textContent = '…'; pill.className = 'pill'; return; }
+
+  // settings panel: status of the local app, whichever engine is selected
+  txt.className = '';
+  if (!host) txt.textContent = 'App locale: non verificata';
+  else if (host.status === 'ok') {
+    const missing = [!host.ffmpeg && 'ffmpeg', !host.ytdlp && 'yt-dlp'].filter(Boolean);
+    txt.textContent = missing.length ? `App locale installata, manca ${missing.join(' e ')}` : `App locale pronta (v${host.version})`;
+    txt.className = missing.length ? 'bad' : 'ok';
+  } else {
+    txt.textContent = host.status === 'missing' ? 'App locale non installata' : 'App locale: errore di comunicazione';
+    txt.className = 'bad';
+  }
+  txt.title = host?.status === 'ok' ? `${host.ffmpeg || 'ffmpeg mancante'}\nyt-dlp ${host.ytdlp || 'mancante'}` : (host?.error || '');
+  $('#btn-install').hidden = host?.status === 'ok' && host.ffmpeg && host.ytdlp;
+
+  if (!native) {
+    pill.textContent = 'nel browser';
+    pill.className = 'pill ok';
+    pill.title = 'Download e unione nel browser, niente da installare';
+    return;
+  }
+  if (!host) { pill.textContent = 'app locale …'; pill.className = 'pill'; return; }
   if (host.status === 'ok') {
-    pill.textContent = 'pronto';
+    pill.textContent = 'app locale';
     pill.className = 'pill ok';
     pill.title = `Host ${host.version}\n${host.ffmpeg || 'ffmpeg mancante'}\nyt-dlp ${host.ytdlp || 'mancante'}`;
     if (!host.ffmpeg || !host.ytdlp) {
@@ -157,18 +183,48 @@ function renderHost(host) {
     }
     return;
   }
-  pill.textContent = host.status === 'missing' ? 'host mancante' : 'errore host';
+  pill.textContent = host.status === 'missing' ? 'app mancante' : 'errore app';
   pill.className = 'pill bad';
   warn.hidden = false;
-  if (host.status === 'missing') {
-    warn.replaceChildren(
-      'Il programma locale non è installato. Dalla cartella del progetto esegui:',
-      el('code', {}, `./host/install.sh ${chrome.runtime.id}`),
-      'poi riapri questo popup.',
-    );
-  } else {
-    warn.replaceChildren('Errore di comunicazione con il programma locale: ', el('span', { class: 'err' }, host.error || ''));
-  }
+  warn.replaceChildren(
+    ...(host.status === 'missing'
+      ? ["Hai scelto l'app locale, ma non è installata."]
+      : ['Errore di comunicazione con l\'app locale: ', el('span', { class: 'err' }, host.error || '')]),
+    el('div', { class: 'actions-inline' },
+      el('button', { class: 'ghost', onclick: () => openSettings(true) }, 'Installa app locale'),
+      el('button', { class: 'link', onclick: () => useEngine('browser') }, 'usa il motore nel browser')),
+  );
+}
+
+function openSettings(install = false) {
+  $('#settings').hidden = false;
+  send({ type: 'hostCheck' });
+  if (install) $('#btn-install').focus();
+}
+
+function useEngine(engine) {
+  settings.engine = engine;
+  for (const r of document.querySelectorAll('input[name=engine]')) r.checked = r.value === engine;
+  saveSettings();
+}
+
+async function installLocalApp() {
+  const help = $('#install-help');
+  const btn = $('#btn-install');
+  btn.disabled = true;
+  help.hidden = false;
+  help.replaceChildren('Preparo l\'installer…');
+  const r = await send({ type: 'installer' });
+  btn.disabled = false;
+  if (r?.error) { help.replaceChildren(el('span', { class: 'err' }, r.error)); return; }
+  const cmd = `bash '${r.path.replace(/'/g, `'\\''`)}'`;
+  const copy = el('button', { class: 'link', onclick: async () => { await navigator.clipboard.writeText(cmd); copy.textContent = 'copiato ✓'; } }, 'copia comando');
+  help.replaceChildren(
+    el('span', {}, 'Installer salvato in Download. Apri un terminale ed esegui:'),
+    el('code', {}, cmd),
+    el('span', { class: 'muted' }, "Copia l'app in ~/.local/share/flux-capacitor, la registra in Brave/Chrome/Firefox e propone di installare ffmpeg e yt-dlp se mancano."),
+    el('div', { class: 'row-actions' }, copy, el('button', { class: 'link', onclick: () => send({ type: 'hostCheck' }) }, 'fatto, verifica')),
+  );
 }
 
 function renderDetect() {
@@ -229,7 +285,9 @@ function renderStream(s) {
   if (s.probe.status === 'error') {
     body.append(
       el('div', { class: 'err' }, s.probe.error || 'Errore sconosciuto'),
-      el('div', {}, el('button', { class: 'ghost', onclick: () => send({ type: 'probe', tabId, streamId: s.id }) }, 'Riprova')),
+      el('div', { class: 'actions' },
+        el('button', { class: 'ghost', onclick: () => send({ type: 'probe', tabId, streamId: s.id }) }, 'Riprova'),
+        s.probe.needsHost ? el('button', { class: 'link', onclick: () => openSettings(true) }, 'installa app locale') : null),
     );
     return card;
   }
@@ -342,16 +400,17 @@ function renderStream(s) {
 function renderJobs(jobs) {
   const list = Object.values(jobs || {}).sort((a, b) => b.startedAt - a.startedAt);
   $('#jobs-head').hidden = list.length === 0;
-  $('#btn-clear-jobs').hidden = !list.some((j) => j.state !== 'running');
+  $('#btn-clear-jobs').hidden = !list.some((j) => j.state !== 'running' && j.state !== 'saving');
   $('#jobs').replaceChildren(...list.map((j) => {
     const pct = Math.round((j.progress || 0) * 100);
-    const right = j.state === 'running'
+    const active = j.state === 'running' || j.state === 'saving';
+    const right = active
       ? [fmtSpeed(j.speed), j.eta != null ? `ETA ${fmtEta(j.eta)}` : null, `${pct}%`].filter(Boolean).join(' · ')
       : '';
     const buttons = [];
-    if (j.state === 'running') buttons.push(el('button', { class: 'link', onclick: () => send({ type: 'cancel', jobId: j.id }) }, 'annulla'));
-    if (j.state === 'done') buttons.push(el('button', { class: 'link', onclick: () => send({ type: 'reveal', path: j.output }) }, 'apri cartella'));
-    if (j.state !== 'running') buttons.push(el('button', { class: 'link', onclick: () => send({ type: 'removeJob', jobId: j.id }) }, 'rimuovi'));
+    if (active) buttons.push(el('button', { class: 'link', onclick: () => send({ type: 'cancel', jobId: j.id }) }, 'annulla'));
+    if (j.state === 'done') buttons.push(el('button', { class: 'link', onclick: () => send({ type: 'reveal', jobId: j.id }) }, j.engine === 'browser' ? 'mostra file' : 'apri cartella'));
+    if (!active) buttons.push(el('button', { class: 'link', onclick: () => send({ type: 'removeJob', jobId: j.id }) }, 'rimuovi'));
     return el('div', { class: `job ${j.state}` },
       el('div', { class: 'job-top' },
         el('span', { class: 'job-name', title: j.output || '' }, `${j.filename}.${j.container}`),
@@ -365,26 +424,40 @@ function renderJobs(jobs) {
 }
 
 // -------------------------------------------------------------- settings ---
+function saveSettings() {
+  settings = {
+    engine: document.querySelector('input[name=engine]:checked')?.value || 'browser',
+    outputDir: $('#set-dir').value.trim() || DEFAULT_SETTINGS.outputDir,
+    container: $('#set-container').value,
+    fragments: Math.min(32, Math.max(1, parseInt($('#set-fragments').value, 10) || 8)),
+    langs: $('#set-langs').value,
+    autoDetect: $('#set-auto').checked,
+  };
+  chrome.storage.local.set({ settings });
+  $('#dir-field').hidden = settings.engine !== 'native';
+  if (settings.engine === 'native') send({ type: 'hostCheck' });
+  renderHost();
+  renderDetect();
+  renderStreams(lastStreams, true);
+}
+
 function bindSettings() {
+  for (const r of document.querySelectorAll('input[name=engine]')) {
+    r.checked = r.value === settings.engine;
+    r.addEventListener('change', saveSettings);
+  }
+  $('#dir-field').hidden = settings.engine !== 'native';
   $('#set-dir').value = settings.outputDir;
   $('#set-container').value = settings.container;
   $('#set-fragments').value = settings.fragments;
   $('#set-langs').value = settings.langs;
   $('#set-auto').checked = !!settings.autoDetect;
-  const save = () => {
-    settings = {
-      outputDir: $('#set-dir').value.trim() || DEFAULT_SETTINGS.outputDir,
-      container: $('#set-container').value,
-      fragments: Math.min(32, Math.max(1, parseInt($('#set-fragments').value, 10) || 8)),
-      langs: $('#set-langs').value,
-      autoDetect: $('#set-auto').checked,
-    };
-    chrome.storage.local.set({ settings });
-    renderDetect();
-    renderStreams(lastStreams, true);
-  };
-  for (const id of ['#set-dir', '#set-container', '#set-fragments', '#set-langs', '#set-auto']) $(id).addEventListener('change', save);
-  $('#btn-settings').addEventListener('click', () => { $('#settings').hidden = !$('#settings').hidden; });
+  for (const id of ['#set-dir', '#set-container', '#set-fragments', '#set-langs', '#set-auto']) $(id).addEventListener('change', saveSettings);
+  $('#btn-settings').addEventListener('click', () => {
+    if ($('#settings').hidden) openSettings(); else $('#settings').hidden = true;
+  });
+  $('#btn-install').addEventListener('click', installLocalApp);
+  $('#btn-verify').addEventListener('click', () => send({ type: 'hostCheck' }));
 }
 
 // ------------------------------------------------------------------ init ---
@@ -423,7 +496,8 @@ async function init() {
   $('#btn-detect').addEventListener('click', () => send({ type: 'arm', tabId }));
   $('#btn-stop').addEventListener('click', () => send({ type: 'disarm', tabId }));
   $('#btn-clear-jobs').addEventListener('click', () => send({ type: 'clearFinished' }));
-  send({ type: 'hostCheck' });
+  // The local app is only started when it is the chosen engine (or the settings are opened).
+  if (settings.engine === 'native') send({ type: 'hostCheck' });
 }
 
 init();

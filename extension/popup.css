@@ -116,3 +116,19 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 .job.error .job-info > span:first-child { white-space: normal; }
 
 .notice.soft { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+
+.field { display: grid; gap: 4px; }
+.field-title { color: var(--muted); font-size: 12px; }
+.panel label.choice { display: flex; gap: 8px; align-items: flex-start; color: var(--text); font-size: 13px; cursor: pointer; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; }
+.panel label.choice:has(input:checked) { border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.panel label.choice input { margin-top: 3px; accent-color: var(--accent); }
+.panel label.choice small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+.subpanel { display: grid; gap: 8px; padding: 10px; border-radius: 8px; background: var(--surface-2); }
+.native-status { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.native-status #native-text { flex: 1; min-width: 0; font-size: 12px; }
+.native-status #native-text.ok { color: var(--ok); }
+.native-status #native-text.bad { color: var(--danger); }
+.install-help { font-size: 12px; display: grid; gap: 6px; }
+.install-help code { display: block; padding: 6px 8px; background: var(--bg); border-radius: 6px; font-size: 11.5px; word-break: break-all; user-select: all; }
+.install-help .row-actions { display: flex; gap: 10px; }
+.notice .actions-inline { display: flex; gap: 10px; margin-top: 8px; }

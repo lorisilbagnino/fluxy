@@ -9,21 +9,42 @@
   <header>
     <img src="icons/icon32.png" alt="" width="24" height="24">
     <h1>Flux Capacitor</h1>
-    <span id="host-status" class="pill" title="Stato del programma locale">…</span>
+    <span id="host-status" class="pill" title="Motore di download">…</span>
     <button id="btn-settings" class="icon-btn" title="Impostazioni" aria-label="Impostazioni">⚙</button>
   </header>
 
   <section id="host-warning" class="notice" hidden></section>
 
   <section id="settings" class="panel" hidden>
-    <label>Cartella di destinazione
-      <input id="set-dir" type="text" spellcheck="false">
-    </label>
+    <div class="field">
+      <span class="field-title">Motore</span>
+      <label class="choice">
+        <input type="radio" name="engine" value="browser">
+        <span>Tutto nel browser
+          <small>Niente da installare. Il file finisce nella cartella Download del browser. Solo HLS.</small></span>
+      </label>
+      <label class="choice">
+        <input type="radio" name="engine" value="native">
+        <span>App locale (ffmpeg + yt-dlp)
+          <small>Anche DASH, cartella di destinazione a scelta, unione con ffmpeg.</small></span>
+      </label>
+    </div>
+    <div id="native-box" class="subpanel">
+      <div class="native-status">
+        <span id="native-text" class="muted">App locale: …</span>
+        <button id="btn-verify" class="link">verifica</button>
+        <button id="btn-install" class="ghost">Installa app locale</button>
+      </div>
+      <div id="install-help" class="install-help" hidden></div>
+      <label id="dir-field">Cartella di destinazione (app locale)
+        <input id="set-dir" type="text" spellcheck="false">
+      </label>
+    </div>
     <div class="row">
       <label>Formato predefinito
         <select id="set-container"><option value="mkv">MKV</option><option value="mp4">MP4</option></select>
       </label>
-      <label>Download in parallelo
+      <label>Connessioni in parallelo
         <input id="set-fragments" type="number" min="1" max="32">
       </label>
     </div>

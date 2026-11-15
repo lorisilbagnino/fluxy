@@ -27,7 +27,7 @@ import traceback
 import urllib.parse
 import urllib.request
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 CACHE_DIR = os.path.join(os.path.expanduser("~/.cache"), "flux-capacitor")
 LOG_FILE = os.path.join(CACHE_DIR, "host.log")
 UA_FALLBACK = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -846,7 +846,20 @@ def handle(msg: dict):
         send({"type": "error", "id": rid, "error": f"unknown message type {t}"})
 
 
+def doctor() -> dict:
+    """For install.sh: what is missing and the command that installs it on this system."""
+    has_ytdlp = bool(shutil.which("yt-dlp"))
+    env = ytdlp_env() if has_ytdlp else {"cryptodome": False, "variant": None, "path": None}
+    missing = [t for t in ("ffmpeg", "ffprobe", "yt-dlp") if not shutil.which(t)]
+    hints = install_hints(env)
+    return {"missing": missing, "tools": hints["tools"],
+            "cryptodome": None if (not has_ytdlp or env["cryptodome"]) else hints["cryptodome"]}
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "doctor":
+        print(json.dumps(doctor()))
+        return
     if len(sys.argv) > 2 and sys.argv[1] == "probe":
         hdrs = dict(h.split(":", 1) for h in sys.argv[3:])
         print(json.dumps(probe(sys.argv[2], {k.strip(): v.strip() for k, v in hdrs.items()}), indent=2))

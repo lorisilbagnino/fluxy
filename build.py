@@ -5,7 +5,9 @@
                              dist/flux-capacitor-<ver>-chromium.zip
                              dist/flux-capacitor-<ver>-firefox.xpi
 
-`extension/` is the source and stays loadable unpacked in Chromium as is.
+`extension/` is the source and stays loadable unpacked in Chromium as is
+(after a first ./build.py, which also copies the native host into
+extension/native/ for the "install the local app" button).
 Only the manifest differs between targets.
 """
 import json
@@ -18,6 +20,14 @@ SRC = ROOT / "extension"
 DIST = ROOT / "dist"
 GECKO_ID = "flux-capacitor@fluxcapacitor.local"   # must match host/install.sh
 SKIP = {".DS_Store"}
+NATIVE = [ROOT / "host" / "flux_host.py", ROOT / "host" / "install.sh"]   # bundled for the installer button
+
+
+def sync_native():
+    dest = SRC / "native"
+    dest.mkdir(exist_ok=True)
+    for f in NATIVE:
+        shutil.copy2(f, dest / f.name)
 
 
 def chromium_manifest(m: dict) -> dict:
@@ -28,6 +38,7 @@ def firefox_manifest(m: dict) -> dict:
     m = dict(m)
     m.pop("key", None)                      # Chromium-only: fixes the extension ID
     m.pop("minimum_chrome_version", None)
+    m["permissions"] = [p for p in m["permissions"] if p != "offscreen"]   # Chromium-only API
     sw = m.pop("background")["service_worker"]
     # Firefox MV3 has no service workers for extensions: event page with ES modules
     m["background"] = {"scripts": [sw], "type": "module"}
@@ -61,6 +72,7 @@ def pack(folder: Path, dest: Path):
 
 def main():
     version = json.loads((SRC / "manifest.json").read_text(encoding="utf-8"))["version"]
+    sync_native()
     DIST.mkdir(exist_ok=True)
     for target, transform, ext in (("chromium", chromium_manifest, "zip"), ("firefox", firefox_manifest, "xpi")):
         folder = build(target, transform)

@@ -1,6 +1,10 @@
 // Helpers shared by the background worker and the popup.
 
-export const DEFAULT_SETTINGS = { outputDir: '~/Downloads', container: 'mkv', langs: 'it, en', fragments: 8, autoDetect: false };
+export const DEFAULT_SETTINGS = {
+  engine: 'browser',          // 'browser' = everything in the extension, 'native' = ffmpeg + yt-dlp via the local app
+  outputDir: '~/Downloads',   // native engine only (the browser engine saves to the browser's download folder)
+  container: 'mkv', langs: 'it, en', fragments: 8, autoDetect: false,
+};
 
 export function stripQuery(u) {
   try { const x = new URL(u); return x.origin + x.pathname; } catch { return u; }
