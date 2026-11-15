@@ -133,7 +133,7 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 .install-help .row-actions { display: flex; gap: 10px; }
 .notice .actions-inline { display: flex; gap: 10px; margin-top: 8px; }
 
-.rec-box { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); align-items: center; padding: 8px 10px; margin-top: 12px; display: flex; gap: 10px; }
+.rec-box { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); align-items: center; padding: 8px 10px; display: flex; gap: 10px; }
 .rec-text { font-size: 12px; flex: 1; }
 .rec-text small { color: var(--muted); font-size: 11.5px; display: block; }
 .rec-error { margin-top: 6px; }
