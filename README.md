@@ -78,7 +78,7 @@ The local app and the installer follow the same language (the extension passes i
 ## Build
 
 ```bash
-./build.py                              # DONATE_URL=https://ko-fi.com/<name> ./build.py  shows "Support Fluxy"
+./build.py                              # DONATE_URL= ./build.py  builds without the Ko-fi link
 ```
 
 | Target | Unpacked | Archive |
@@ -197,5 +197,5 @@ are accepted under the same license.
 
 ## Support
 
-Fluxy is free. If it's useful to you, you can support it with a spontaneous donation (link in the settings panel
-and on the store pages).
+Fluxy is free. If it's useful to you, you can support it with a spontaneous donation:
+[**ko-fi.com/lorisilbagnino**](https://ko-fi.com/lorisilbagnino) ☕ (also linked in the settings panel and on the store pages).

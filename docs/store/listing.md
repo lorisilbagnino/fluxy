@@ -4,7 +4,7 @@ Testi pronti da incollare per **Chrome Web Store** (vale anche per **Edge Add-on
 Prima la versione italiana, poi quella inglese: negli store conviene usare l'inglese come lingua predefinita e
 aggiungere l'italiano come traduzione.
 
-Pacchetti da caricare (`DONATE_URL=https://ko-fi.com/<nome> ./build.py`, oppure dalla release GitHub):
+Pacchetti da caricare (`./build.py`, oppure dalla release GitHub; il link Ko-fi è incluso):
 
 | Store | File |
 |---|---|
@@ -22,8 +22,7 @@ la sua descrizione e i suoi screenshot (`images/en/`, `images/it/`).
 - AMO ha un campo apposito, *Contributions URL*, che accetta Ko-fi: compare come pulsante "Support this developer".
 - Chrome Web Store non ha un campo: si mette il link in fondo alla descrizione (riga già predisposta sotto) e
   nell'estensione (link "Sostieni Fluxy" nelle impostazioni, attivo se la build ha `DONATE_URL`).
-- Nel testo sostituire `<KOFI_URL>` con l'indirizzo della pagina Ko-fi; se l'account non esiste ancora, togliere la
-  riga.
+- Pagina Ko-fi: https://ko-fi.com/lorisilbagnino (già inserita nei testi).
 
 Immagini: `docs/store/images/{en,it}/` (vedi in fondo).
 
@@ -71,7 +70,7 @@ Cosa Fluxy non fa
 
 Usa Fluxy solo per contenuti che hai il diritto di salvare.
 
-Fluxy è gratuito. Se ti è utile, puoi offrirmi un caffè: <KOFI_URL>
+Fluxy è gratuito. Se ti è utile, puoi offrirmi un caffè: https://ko-fi.com/lorisilbagnino
 ```
 
 ---
@@ -118,7 +117,7 @@ What Fluxy doesn't do
 
 Only use Fluxy for content you have the right to save.
 
-Fluxy is free. If you find it useful, you can buy me a coffee: <KOFI_URL>
+Fluxy is free. If you find it useful, you can buy me a coffee: https://ko-fi.com/lorisilbagnino
 ```
 
 ---
@@ -163,7 +162,7 @@ nessuna raccolta dati, permessi limitati alla funzione.
 ## AMO — campi del Developer Hub
 
 **Categorie**: Download Management · Photos, Music & Videos
-**Contributions URL**: `<KOFI_URL>` (Ko-fi è tra i servizi accettati)
+**Contributions URL**: `https://ko-fi.com/lorisilbagnino` (Ko-fi è tra i servizi accettati)
 **Licenza**: GNU General Public License v3.0 (GPL-3.0-or-later, con termini aggiuntivi in `ADDITIONAL-TERMS.md`:
 su AMO scegliere "GNU General Public License v3.0"). Codice sorgente: https://github.com/lorisilbagnino/fluxy
 **Informativa privacy**: il testo di `docs/PRIVACY.md`.
@@ -216,5 +215,5 @@ I sorgenti HTML sono in `docs/store/src/` (testi in `src/strings.js`); si rigene
 - [ ] Informativa privacy raggiungibile da un URL pubblico (il repository è privato: GitHub Pages su repo privati
       richiede un piano a pagamento; in alternativa un gist pubblico o una pagina sul proprio sito).
 - [x] Licenza del progetto: GPL-3.0-or-later + termini aggiuntivi.
-- [ ] Aprire l'account Ko-fi, impostare la variabile `DONATE_URL` del repository e sostituire `<KOFI_URL>`.
+- [x] Account Ko-fi: https://ko-fi.com/lorisilbagnino (link nel popup, nelle schede e nel pulsante Sponsor di GitHub).
 - [ ] Caricare `fluxy-<ver>-chrome-store.zip` / `fluxy-<ver>-firefox-store.xpi`, testi, immagini, giustificazioni.

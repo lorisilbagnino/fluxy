@@ -51,7 +51,7 @@ App locale e installer seguono la stessa lingua (l'estensione la comunica all'ap
 ## Build, release, store
 
 ```bash
-./build.py                              # DONATE_URL=https://ko-fi.com/<nome> ./build.py  mostra "Sostieni Fluxy"
+./build.py                              # DONATE_URL= ./build.py  crea la build senza il link Ko-fi
 ```
 
 Genera in `dist/` i pacchetti `chromium` (.zip), `firefox` (.xpi), `chrome-store` (.zip) e `firefox-store` (.xpi).
@@ -109,5 +109,5 @@ request sono accettati con la stessa licenza.
 
 ## Sostieni Fluxy
 
-Fluxy è gratuito. Se ti è utile puoi sostenerlo con una donazione spontanea (link nelle impostazioni e nelle schede
-degli store).
+Fluxy è gratuito. Se ti è utile puoi sostenerlo con una donazione spontanea:
+[**ko-fi.com/lorisilbagnino**](https://ko-fi.com/lorisilbagnino) ☕ (il link è anche nelle impostazioni e nelle schede degli store).

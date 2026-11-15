@@ -26,8 +26,8 @@ jobs:
       # step-level env is not visible to a step's own `if`
       AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
       AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
-      # repository variable, e.g. https://ko-fi.com/<name>: "Support Fluxy" link in the popup (empty = hidden)
-      DONATE_URL: ${{ vars.DONATE_URL }}
+      # "Support Fluxy" link in the popup: repository variable DONATE_URL, default Ko-fi
+      DONATE_URL: ${{ vars.DONATE_URL || 'https://ko-fi.com/lorisilbagnino' }}
     steps:
       - uses: actions/checkout@v4
 
