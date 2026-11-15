@@ -53,6 +53,11 @@
       <span>Rilevamento automatico su tutte le schede
         <small>Se disattivo, l'estensione non osserva la rete finché non premi “Rileva” su una scheda.</small></span>
     </label>
+    <label class="check">
+      <input id="set-rec-convert" type="checkbox">
+      <span>Converti le registrazioni nel formato predefinito
+        <small>MKV: stesse tracce del WebM registrato, senza ricodifica. MP4: H.264 + AAC, registrato direttamente in H.264 dove il browser lo permette, altrimenti convertito allo stop. Se disattivo, salva il WebM registrato dal browser.</small></span>
+    </label>
     <label>Lingue preferite (preselezionate)
       <input id="set-langs" type="text" placeholder="it, en" spellcheck="false">
     </label>
@@ -64,6 +69,13 @@
       <button id="btn-clear-jobs" class="link">rimuovi completati</button>
     </div>
     <div id="jobs"></div>
+
+    <div class="rec-box">
+      <span class="rec-text">Videochiamate e video WebRTC
+        <small>Clicca un video della pagina e registralo.</small></span>
+      <button id="btn-rec" class="ghost">● Registra un video</button>
+    </div>
+    <div id="rec-error" class="err rec-error" hidden></div>
 
     <div class="section-head">
       <h2>Stream in questa scheda</h2>

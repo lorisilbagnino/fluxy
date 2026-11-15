@@ -4,7 +4,7 @@
 
 Estensione per browser Chromium e Firefox (testata su **Brave Origin 157** e **Firefox 160**) che rileva gli stream **HLS**
 e **DASH** caricati dalle pagine, ti fa scegliere qualità video, tracce audio e sottotitoli, e li salva in **un unico
-MKV o MP4 senza ricodifica**.
+MKV o MP4 senza ricodifica**. Può anche **registrare i video WebRTC** (videochiamate, dirette) di una pagina.
 
 ## Due motori, a scelta (⚙ → Motore)
 
@@ -31,6 +31,9 @@ extension/
     runner.js       un job: download → unione → file pronto da salvare; pulizia di OPFS
   offscreen.*     Chromium: documento nascosto che esegue runner.js (il service worker può essere fermato)
                   Firefox: runner.js gira nella pagina di background, tenuta sveglia durante i download
+  recorder/       registrazione di un <video>
+    page.js         nel contesto della pagina (MAIN world): selezione del video, pannello, MediaRecorder
+    bridge.js       content script: crea il job e inoltra i pezzi al motore su una porta
   popup.*         scelta flussi, coda download, impostazioni, installazione dell'app locale
 host/
   flux_host.py    app locale (native messaging, solo stdlib): analisi DASH (yt-dlp), download con yt-dlp,
@@ -106,6 +109,38 @@ dell'host contiene il percorso assoluto). Per rimuovere: `./host/install.sh --un
   Prima di iniziare l'estensione controlla lo spazio disponibile.
 - App locale: il file viene scritto in una cartella temporanea `.flux-<id>` dentro la destinazione e spostato alla fine.
 
+## Registrare un video WebRTC
+
+1. Nel popup premi **● Registra un video**: i video della pagina (anche dentro i riquadri) vengono evidenziati.
+2. Clicca quello da registrare: compare un pannello in alto a destra. Se l'audio è riprodotto da altri elementi
+   della pagina (tipico delle videochiamate), la casella *Aggiungi l'audio degli altri elementi* li mescola nella
+   registrazione.
+3. **● Registra**, poi **■ Stop** (dal pannello o da *stop e salva* nel popup): si apre "Salva con nome" per
+   scegliere dove salvare il file. Se chiudi la finestra senza salvare, la registrazione resta nel popup con
+   *salva…* / *scarta*.
+
+Formato (⚙ → *Converti le registrazioni nel formato predefinito*, attivo di default): le registrazioni seguono il
+*Formato predefinito*.
+
+| | Come viene prodotto |
+|---|---|
+| **MKV** | il WebM registrato (VP9/VP8 + Opus) copiato in MKV, senza ricodifica |
+| **MP4** | Chromium registra direttamente in H.264 → solo copia (Opus convertito in AAC se il browser lo sa codificare); Firefox registra solo VP8 → allo stop ricodifica in H.264 + AAC con WebCodecs |
+| conversione disattivata | il `.webm` registrato dal browser |
+
+Se la conversione non riesce, il file viene salvato così come è stato registrato e il popup lo segnala.
+
+Come funziona: `MediaRecorder` registra lo stream del `<video>` (`srcObject`, oppure `captureStream()` per i video
+normali su Chromium) in pezzi da 1 s che finiscono nello spazio privato dell'estensione (OPFS). Allo stop il file
+viene riscritto con la `Conversion` di Mediabunny, che aggiunge anche durata e indici: senza, molti player non
+permettono di spostarsi nel file. Se la scheda viene chiusa durante la registrazione, quanto registrato fino a quel
+momento viene comunque proposto per il salvataggio.
+
+Limiti: la registrazione **ricodifica**: un video WebRTC arriva già decodificato, non ci sono
+pacchetti originali da copiare. Le tracce audio aggiunte dopo l'avvio (nuovi partecipanti) e i cambi di
+`srcObject` durante la registrazione non vengono seguiti. Su Firefox si registrano solo i video WebRTC
+(`mozCaptureStream` toglierebbe l'audio alla pagina).
+
 ## Debug
 
 - Analisi da terminale: `./host/flux_host.py probe "<url.m3u8>" "Referer: https://…"`
@@ -122,6 +157,7 @@ dell'host contiene il percorso assoluto). Per rimuovere: `./host/install.sh --un
 
 ## Limiti noti
 
+- Registrazione video: vedi sopra.
 - I contenuti protetti da DRM (Widevine/PlayReady/FairPlay, SAMPLE-AES) sono riconosciuti e **non** scaricati.
   AES-128 standard di HLS è supportato da entrambi i motori.
 - Motore nel browser: gli stream con salti di timestamp (`EXT-X-DISCONTINUITY`, tipici delle pubblicità inserite)

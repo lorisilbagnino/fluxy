@@ -391,7 +391,7 @@ function updateJob(jobId, msg) {
   return mutateJobs((jobs) => {
     const j = jobs[jobId];
     if (!j) return;
-    for (const k of ['state', 'progress', 'stage', 'speed', 'eta', 'output', 'error']) {
+    for (const k of ['state', 'progress', 'stage', 'speed', 'eta', 'output', 'error', 'size', 'elapsed', 'container', 'note']) {
       if (msg[k] !== undefined) j[k] = msg[k];
     }
     if (msg.state && msg.state !== 'running' && msg.state !== 'saving') j.finishedAt = Date.now();
@@ -401,7 +401,7 @@ function updateJob(jobId, msg) {
 function failRunningJobs(err, engine = 'native') {
   return mutateJobs((jobs) => {
     for (const j of Object.values(jobs)) {
-      if ((j.engine || 'native') === engine && (j.state === 'running' || j.state === 'saving')) {
+      if ((j.engine || 'native') === engine && (j.state === 'running' || j.state === 'saving' || j.state === 'unsaved')) {
         Object.assign(j, { state: 'error', error: err, stage: 'Errore', finishedAt: Date.now() });
       }
     }
@@ -463,14 +463,18 @@ const browserEngine = IS_FIREFOX ? localEngine() : offscreenEngine();
 
 function localEngine() {
   let runner = null;
-  const load = () => (runner ||= import('./engine/runner.js'));
+  let mod = null;
+  const load = () => (runner ||= import('./engine/runner.js').then((m) => (mod = m)));
   const bridge = {
     emit: (jobId, fields) => onEngineEvent(jobId, fields),
     ensureHosts: (jobId, urls) => ensureJobHosts(jobId, urls),
   };
   return {
     prepare: load,
+    ready: load,
     start: async (jobId, spec) => { const r = await load(); keepAlive(); r.startJob(jobId, spec, bridge); },
+    // listeners must be attached synchronously, or the first port messages are lost
+    accept: (port) => { keepAlive(); if (mod) mod.acceptRecording(port, bridge); else load().then((m) => m.acceptRecording(port, bridge)); },
     cancel: async (jobId) => (await load()).cancelJob(jobId),
     cleanup: async (jobId) => (await load()).cleanupJob(jobId),
   };
@@ -496,6 +500,7 @@ function offscreenEngine() {
   };
   return {
     prepare: ensure,
+    ready: () => send('ping'),
     start: (jobId, spec) => send('start', { jobId, spec }),
     cancel: (jobId) => send('cancel', { jobId }),
     cleanup: async (jobId) => { if (await chrome.offscreen.hasDocument()) await send('cleanup', { jobId }); },
@@ -509,7 +514,7 @@ function keepAlive() {
   if (!IS_FIREFOX || keepAliveTimer) return;
   keepAliveTimer = setInterval(async () => {
     const jobs = await getJobs();
-    if (!Object.values(jobs).some((j) => j.engine === 'browser' && (j.state === 'running' || j.state === 'saving'))) {
+    if (!Object.values(jobs).some((j) => j.engine === 'browser' && ['running', 'saving', 'unsaved'].includes(j.state))) {
       clearInterval(keepAliveTimer);
       keepAliveTimer = null;
     }
@@ -547,14 +552,26 @@ async function downloadFilename(id) {
 async function saveFiles(jobId, files) {
   const j = (await getJobs())[jobId];
   if (!j || j.state !== 'saving') return;
+  const record = j.kind === 'record';
+  // recordings: the user picks the destination ("Save as"), and may retry if they dismiss it
+  if (record) await mutateJobs((jobs) => { if (jobs[jobId]) jobs[jobId].files = files; });
   const main = files.find((f) => f.main);
   const ids = [];
-  const mainId = await chrome.downloads.download({ url: main.url, filename: `${safeName(j.filename)}.${main.ext}`, conflictAction: 'uniquify', saveAs: false });
+  let mainId;
+  try {
+    mainId = await chrome.downloads.download({ url: main.url, filename: `${safeName(j.filename)}.${main.ext}`, conflictAction: 'uniquify', saveAs: record });
+  } catch (e) {
+    if (record && /cancel/i.test(e.message)) return markUnsaved(jobId);   // Firefox: dialog dismissed
+    throw e;
+  }
   ids.push(mainId);
-  // sidecar subtitles follow the name the browser actually gave the video ("film (1).mp4" → "film (1).it.srt")
-  const stem = basename(await downloadFilename(mainId)).replace(/\.[^.]+$/, '') || safeName(j.filename);
-  for (const f of files.filter((x) => !x.main)) {
-    ids.push(await chrome.downloads.download({ url: f.url, filename: `${stem}.${f.ext}`, conflictAction: 'uniquify', saveAs: false }));
+  const sidecars = files.filter((x) => !x.main);
+  if (sidecars.length) {
+    // sidecar subtitles follow the name the browser actually gave the video ("film (1).mp4" → "film (1).it.srt")
+    const stem = basename(await downloadFilename(mainId)).replace(/\.[^.]+$/, '') || safeName(j.filename);
+    for (const f of sidecars) {
+      ids.push(await chrome.downloads.download({ url: f.url, filename: `${stem}.${f.ext}`, conflictAction: 'uniquify', saveAs: false }));
+    }
   }
   await mutateJobs((jobs) => {
     if (jobs[jobId]) Object.assign(jobs[jobId], { downloadIds: ids, downloadsLeft: ids.length, mainDownloadId: mainId });
@@ -564,6 +581,13 @@ async function saveFiles(jobId, files) {
     const [item] = await chrome.downloads.search({ id });
     if (item && item.state !== 'in_progress') onDownloadChanged({ id, state: { current: item.state }, error: item.error && { current: item.error } });
   }
+}
+
+function markUnsaved(jobId) {
+  return mutateJobs((jobs) => {
+    const j = jobs[jobId];
+    if (j?.state === 'saving') Object.assign(j, { state: 'unsaved', stage: 'Non salvata', progress: 0, downloadIds: [], finishedAt: Date.now() });
+  });
 }
 
 const settledDownloads = new Set();
@@ -584,6 +608,8 @@ async function onDownloadChanged(delta) {
       if (x.downloadsLeft <= 0) Object.assign(x, { state: 'done', progress: 1, stage: 'Completato', finishedAt: Date.now() });
       finished = x.state === 'done';
     });
+  } else if (j.kind === 'record' && delta.error?.current === 'USER_CANCELED') {
+    await markUnsaved(j.id);   // "Save as" dismissed or download cancelled: the recording is kept
   } else {
     const why = delta.error?.current || 'interrotto';
     await updateJob(j.id, { state: 'error', stage: 'Errore', error: `Salvataggio non riuscito (${why})` });
@@ -645,14 +671,89 @@ async function downloadInstaller() {
   throw new Error("Download dell'installer non completato");
 }
 
+// ------------------------------------------------------------ recorder ---
+// Popup → recPick: injects recorder/bridge.js (isolated) and recorder/page.js
+// (MAIN world) in every frame and starts the video picker. page.js records with
+// MediaRecorder; bridge.js asks for a job (recStart) and streams the chunks on a
+// port straight to the engine (runner.js acceptRecording).
+const restrictedPage = (e) => /cannot access|cannot be scripted|missing host permission|extensions gallery|webstore/i.test(e.message || '');
+
+async function recPick(tabId) {
+  const target = { tabId, allFrames: true };
+  let res;
+  try {
+    await chrome.scripting.executeScript({ target, files: ['recorder/bridge.js'] });
+    await chrome.scripting.executeScript({ target, func: () => globalThis.__fluxRecBridge?.arm() });
+    await chrome.scripting.executeScript({ target, files: ['recorder/page.js'], world: 'MAIN' });
+    res = await chrome.scripting.executeScript({
+      target, world: 'MAIN',
+      func: () => window[Symbol.for('flux-capacitor-recorder')]?.pick() || { usable: 0, total: 0 },
+    });
+  } catch (e) {
+    throw new Error(restrictedPage(e) ? 'Il browser non permette alle estensioni di accedere a questa pagina.' : e.message);
+  }
+  const usable = res.reduce((a, r) => a + (r.result?.usable || 0), 0);
+  const total = res.reduce((a, r) => a + (r.result?.total || 0), 0);
+  if (!usable) {
+    chrome.tabs.sendMessage(tabId, { fluxRec: 'pickEnd' }).catch(() => {});
+    throw new Error(total
+      ? 'I video della pagina non si possono registrare: avvia la riproduzione e riprova.'
+      : 'Nessun video trovato in questa pagina.');
+  }
+  return { usable };
+}
+
+async function recStart({ title, describe }, sender) {
+  const tabId = sender.tab?.id;
+  if (tabId == null) throw new Error('Scheda sconosciuta');
+  const settings = await getSettings();
+  const target = settings.recConvert ? (settings.container === 'mp4' ? 'mp4' : 'mkv') : 'webm';
+  await browserEngine.prepare();
+  await browserEngine.ready();
+  const jobId = crypto.randomUUID().slice(0, 12);
+  await mutateJobs((jobs) => {
+    jobs[jobId] = {
+      id: jobId, engine: 'browser', kind: 'record', filename: title || 'registrazione', container: target, describe,
+      state: 'running', progress: 0, stage: 'Registrazione', size: 0, elapsed: 0, startedAt: Date.now(),
+      tabId, frameId: sender.frameId ?? 0,
+    };
+  });
+  keepAlive();
+  return { jobId, target };
+}
+
+async function recStop(jobId) {
+  const j = (await getJobs())[jobId];
+  if (j?.kind !== 'record' || j.state !== 'running') return;
+  // if the tab is gone its port is already closed and the recording is being saved
+  await chrome.tabs.sendMessage(j.tabId, { fluxRec: 'stop', jobId }, { frameId: j.frameId }).catch(() => {});
+}
+
+async function recSave(jobId) {
+  const j = (await getJobs())[jobId];
+  if (j?.state !== 'unsaved' || !j.files) return;
+  await updateJob(jobId, { state: 'saving', stage: 'Scegli dove salvare', progress: 0.99 });
+  await saveFiles(jobId, j.files).catch(async (e) => {
+    await updateJob(jobId, { state: 'error', stage: 'Errore', error: `Salvataggio non riuscito: ${e.message}` });
+    browserEngine.cleanup(jobId);
+  });
+}
+
+// Firefox: no offscreen document, recordings are received by this background page.
+if (IS_FIREFOX) {
+  chrome.runtime.onConnect.addListener((port) => {
+    if (port.name.startsWith('flux-rec:')) browserEngine.accept(port);
+  });
+}
+
 // ------------------------------------------------------ popup messages ---
 async function cancelJob(jobId) {
   const j = (await getJobs())[jobId];
   if (!j) return;
   if (j.engine === 'browser') {
-    if (j.state === 'saving') {
-      for (const id of j.downloadIds || []) await chrome.downloads.cancel(id).catch(() => {});
+    if (j.state === 'saving' || j.state === 'unsaved') {
       await updateJob(jobId, { state: 'cancelled', stage: 'Annullato' });
+      for (const id of j.downloadIds || []) await chrome.downloads.cancel(id).catch(() => {});
       browserEngine.cleanup(jobId);
     } else await browserEngine.cancel(jobId);
   } else hostSend({ type: 'cancel', jobId });
@@ -665,7 +766,7 @@ async function reveal(jobId) {
   else hostSend({ type: 'reveal', path: j.output });
 }
 
-chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
+chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (msg?.target === 'offscreen') return false;   // for the offscreen document
   (async () => {
     switch (msg.type) {
@@ -677,15 +778,23 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
       case 'download': return { jobId: await startDownload(msg) };
       case 'cancel': await cancelJob(msg.jobId); return {};
       case 'reveal': await reveal(msg.jobId); return {};
-      case 'removeJob':
+      case 'removeJob': {
+        const j = (await getJobs())[msg.jobId];
+        if (j?.state === 'unsaved') browserEngine.cleanup(msg.jobId);
         await mutateJobs((jobs) => { delete jobs[msg.jobId]; });
         return {};
+      }
       case 'clearFinished':
-        await mutateJobs((jobs) => { for (const [k, j] of Object.entries(jobs)) if (j.state !== 'running' && j.state !== 'saving') delete jobs[k]; });
+        await mutateJobs((jobs) => { for (const [k, j] of Object.entries(jobs)) if (!['running', 'saving', 'unsaved'].includes(j.state)) delete jobs[k]; });
         return {};
       case 'clearTab': await clearTab(msg.tabId); return {};
       case 'arm': await armTab(msg.tabId); return {};
       case 'disarm': await setArmed(msg.tabId, false); return {};
+      case 'recPick': return await recPick(msg.tabId);
+      case 'recPickDone': if (sender.tab) chrome.tabs.sendMessage(sender.tab.id, { fluxRec: 'pickEnd' }).catch(() => {}); return {};
+      case 'recStart': return await recStart(msg, sender);
+      case 'recStop': await recStop(msg.jobId); return {};
+      case 'recSave': await recSave(msg.jobId); return {};
       default: return { error: 'unknown' };
     }
   })().then((r) => reply(r), (e) => reply({ error: e.message }));

@@ -75,6 +75,17 @@ function fmtSpeed(bps) {
   return bps > 1048576 ? `${(bps / 1048576).toFixed(1)} MB/s` : `${Math.round(bps / 1024)} KB/s`;
 }
 
+function fmtSize(b) {
+  if (!b) return '0 MB';
+  return (b >= 1073741824 ? `${(b / 1073741824).toFixed(2)} GB` : `${(b / 1048576).toFixed(1)} MB`).replace('.', ',');
+}
+
+function fmtClock(sec) {
+  sec = Math.floor(sec || 0);
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = String(sec % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+}
+
 function fmtEta(s) {
   if (s == null || !isFinite(s)) return '';
   s = Math.round(s);
@@ -400,25 +411,31 @@ function renderStream(s) {
 function renderJobs(jobs) {
   const list = Object.values(jobs || {}).sort((a, b) => b.startedAt - a.startedAt);
   $('#jobs-head').hidden = list.length === 0;
-  $('#btn-clear-jobs').hidden = !list.some((j) => j.state !== 'running' && j.state !== 'saving');
+  $('#btn-clear-jobs').hidden = !list.some((j) => !['running', 'saving', 'unsaved'].includes(j.state));
   $('#jobs').replaceChildren(...list.map((j) => {
     const pct = Math.round((j.progress || 0) * 100);
     const active = j.state === 'running' || j.state === 'saving';
-    const right = active
-      ? [fmtSpeed(j.speed), j.eta != null ? `ETA ${fmtEta(j.eta)}` : null, `${pct}%`].filter(Boolean).join(' · ')
-      : '';
+    // a recording in progress: no percentage, elapsed time and size instead
+    const recording = j.kind === 'record' && j.state === 'running' && j.stage === 'Registrazione';
+    let right = '';
+    if (recording) right = fmtSize(j.size);
+    else if (active) right = [fmtSpeed(j.speed), j.eta != null ? `ETA ${fmtEta(j.eta)}` : null, `${pct}%`].filter(Boolean).join(' · ');
     const buttons = [];
+    if (recording) buttons.push(el('button', { class: 'link stop-rec', onclick: () => send({ type: 'recStop', jobId: j.id }) }, 'stop e salva'));
     if (active) buttons.push(el('button', { class: 'link', onclick: () => send({ type: 'cancel', jobId: j.id }) }, 'annulla'));
+    if (j.state === 'unsaved') buttons.push(el('button', { class: 'link', onclick: () => send({ type: 'recSave', jobId: j.id }) }, 'salva…'));
     if (j.state === 'done') buttons.push(el('button', { class: 'link', onclick: () => send({ type: 'reveal', jobId: j.id }) }, j.engine === 'browser' ? 'mostra file' : 'apri cartella'));
-    if (!active) buttons.push(el('button', { class: 'link', onclick: () => send({ type: 'removeJob', jobId: j.id }) }, 'rimuovi'));
-    return el('div', { class: `job ${j.state}` },
+    if (!active) buttons.push(el('button', { class: 'link', onclick: () => send({ type: 'removeJob', jobId: j.id }) }, j.state === 'unsaved' ? 'scarta' : 'rimuovi'));
+    const stage = recording ? `● REC ${fmtClock(j.elapsed)}` : j.stage || '';
+    return el('div', { class: `job ${j.state}${recording ? ' recording' : ''}` },
       el('div', { class: 'job-top' },
         el('span', { class: 'job-name', title: j.output || '' }, `${j.filename}.${j.container}`),
         ...buttons),
-      el('div', { class: 'bar' }, el('i', { style: `width:${j.state === 'done' ? 100 : pct}%` })),
+      el('div', { class: 'bar' }, el('i', { style: `width:${j.state === 'done' || recording ? 100 : pct}%` })),
       el('div', { class: 'job-info' },
-        el('span', {}, j.state === 'error' ? el('span', { class: 'err' }, j.error || 'Errore') : `${j.stage || ''}${j.describe ? ' — ' + j.describe : ''}`),
+        el('span', {}, j.state === 'error' ? el('span', { class: 'err' }, j.error || 'Errore') : `${stage}${j.describe ? ' — ' + j.describe : ''}`),
         el('span', {}, right)),
+      j.note ? el('div', { class: 'muted job-note' }, j.note) : null,
     );
   }));
 }
@@ -432,6 +449,7 @@ function saveSettings() {
     fragments: Math.min(32, Math.max(1, parseInt($('#set-fragments').value, 10) || 8)),
     langs: $('#set-langs').value,
     autoDetect: $('#set-auto').checked,
+    recConvert: $('#set-rec-convert').checked,
   };
   chrome.storage.local.set({ settings });
   $('#dir-field').hidden = settings.engine !== 'native';
@@ -452,7 +470,8 @@ function bindSettings() {
   $('#set-fragments').value = settings.fragments;
   $('#set-langs').value = settings.langs;
   $('#set-auto').checked = !!settings.autoDetect;
-  for (const id of ['#set-dir', '#set-container', '#set-fragments', '#set-langs', '#set-auto']) $(id).addEventListener('change', saveSettings);
+  $('#set-rec-convert').checked = !!settings.recConvert;
+  for (const id of ['#set-dir', '#set-container', '#set-fragments', '#set-langs', '#set-auto', '#set-rec-convert']) $(id).addEventListener('change', saveSettings);
   $('#btn-settings').addEventListener('click', () => {
     if ($('#settings').hidden) openSettings(); else $('#settings').hidden = true;
   });
@@ -496,6 +515,14 @@ async function init() {
   $('#btn-detect').addEventListener('click', () => send({ type: 'arm', tabId }));
   $('#btn-stop').addEventListener('click', () => send({ type: 'disarm', tabId }));
   $('#btn-clear-jobs').addEventListener('click', () => send({ type: 'clearFinished' }));
+  $('#btn-rec').addEventListener('click', async () => {
+    $('#btn-rec').disabled = true;
+    const r = await send({ type: 'recPick', tabId });
+    $('#btn-rec').disabled = false;
+    $('#rec-error').hidden = !r?.error;
+    $('#rec-error').textContent = r?.error || '';
+    if (!r?.error) window.close();   // the picker is on the page now
+  });
   // The local app is only started when it is the chosen engine (or the settings are opened).
   if (settings.engine === 'native') send({ type: 'hostCheck' });
 }

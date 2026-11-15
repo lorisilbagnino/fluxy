@@ -2,7 +2,7 @@
 // jobs run in this offscreen document. It only has chrome.runtime: progress
 // goes to the worker as messages.
 
-import { startJob, cancelJob, cleanupJob, cleanupOrphans } from './engine/runner.js';
+import { startJob, cancelJob, cleanupJob, cleanupOrphans, acceptRecording, isRecordingPort } from './engine/runner.js';
 
 const bridge = {
   emit: (jobId, fields) => chrome.runtime.sendMessage({ type: 'engineEvent', jobId, fields }).catch(() => {}),
@@ -18,6 +18,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
     case 'ping': break;
   }
   reply({ ok: true });
+});
+
+// <video> recordings: the content script streams the chunks straight here.
+chrome.runtime.onConnect.addListener((port) => {
+  if (isRecordingPort(port)) acceptRecording(port, bridge);
 });
 
 cleanupOrphans().catch(() => {});
