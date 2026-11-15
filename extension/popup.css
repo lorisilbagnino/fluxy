@@ -147,3 +147,4 @@ details.noise[open] > summary { margin-bottom: 8px; }
 .hint { font-size: 12px; margin: 0 0 10px; }
 .file-ext { color: var(--muted); font-size: 12px; }
 .file-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.opt .srt { font-size: 11px; flex-shrink: 0; }

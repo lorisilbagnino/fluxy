@@ -200,7 +200,10 @@ export async function downloadTrack(url, { dir, name, fetchOpts, parallel = 8, o
 const vttTime = (t) => { const p = t.split(':').map(Number); return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p[0] * 60 + p[1]; };
 const fmtTime = (s) => { s = Math.max(0, s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = (s % 60).toFixed(3).padStart(6, '0'); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${x}`; };
 
-/** Fetches a segmented WebVTT playlist and returns one WebVTT text on the MPEG-TS clock minus `base`. */
+/**
+ * Fetches a segmented WebVTT playlist and returns one WebVTT text on the MPEG-TS clock minus `base`.
+ * base 'auto' (subtitles saved on their own): the first segment's start, i.e. the video's start in normal streams.
+ */
 export async function downloadSubtitles(url, { fetchOpts, base = 0, parallel = 8, ensureHosts }) {
   await ensureHosts?.([url]);
   const segs = parseMediaPlaylist(await fetchText(url, fetchOpts), url);
@@ -211,6 +214,7 @@ export async function downloadSubtitles(url, { fetchOpts, base = 0, parallel = 8
     while (next < segs.length) { const i = next++; texts[i] = new TextDecoder().decode(await fetchSegment(segs[i], fetchOpts)); }
   }));
   const cues = [], seen = new Set();
+  let first = true;
   for (const t of texts) {
     let offset = 0;
     const m = t.match(/X-TIMESTAMP-MAP=([^\r\n]+)/);
@@ -219,6 +223,7 @@ export async function downloadSubtitles(url, { fetchOpts, base = 0, parallel = 8
       const a = Object.fromEntries(m[1].split(',').map((kv) => { const i = kv.indexOf(':'); return [kv.slice(0, i).trim(), kv.slice(i + 1).trim()]; }));
       offset = (Number(a.MPEGTS) || 0) / 90000 - vttTime(a.LOCAL || '00:00:00.000');
     }
+    if (first) { if (base === 'auto') base = offset; first = false; }
     for (const block of t.split(/\r?\n\r?\n/)) {
       const lines = block.split(/\r?\n/);
       const idx = lines.findIndex((l) => l.includes('-->'));

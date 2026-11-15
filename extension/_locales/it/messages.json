@@ -318,7 +318,10 @@
     "message": "Stream non analizzato"
   },
   "errPickOne": {
-    "message": "Seleziona almeno un flusso video o audio"
+    "message": "Seleziona almeno una traccia video, audio o sottotitoli"
+  },
+  "srtTitle": {
+    "message": "Scarica solo questi sottotitoli, come file .srt"
   },
   "errNeedsHost": {
     "message": "Questo stream richiede l'app locale (ffmpeg + yt-dlp): installala da ⚙ → Motore."

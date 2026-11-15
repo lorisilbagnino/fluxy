@@ -4,7 +4,7 @@
 // Lives in the offscreen document (Chromium) or in the background page (Firefox).
 // `bridge` is how it talks to the background: emit(jobId, fields), ensureHosts(jobId, urls).
 
-import { downloadTrack, downloadFile, mux, vttToSrt, lang3 } from './engine.js';
+import { downloadTrack, downloadFile, downloadSubtitles, mux, vttToSrt, lang3 } from './engine.js';
 import { setMaxConnections, CancelledError } from './net.js';
 import { m, setStrings } from './i18n.js';
 
@@ -32,7 +32,7 @@ export async function startJob(jobId, spec, bridge) {
   const emit = (f) => bridge.emit(jobId, f);
   setStrings(spec.strings);
   try {
-    const res = await (spec.kind === 'file' ? runFile : run)(jobId, spec, job, emit, bridge);
+    const res = await ({ file: runFile, subs: runSubs }[spec.kind] || run)(jobId, spec, job, emit, bridge);
     emit({ state: 'saving', progress: 0.99, stage: m('eng_stageSaving'), speed: null, eta: null, files: res });
   } catch (e) {
     const cancelled = e instanceof CancelledError || ctrl.signal.aborted;
@@ -87,6 +87,38 @@ async function runFile(jobId, spec, job, emit, bridge) {
   const url = URL.createObjectURL(file);
   job.urls = [url];
   return [{ url, ext: spec.ext || 'bin', size: file.size, main: true }];
+}
+
+/** Subtitles as .srt files ("Film.it.srt", "Film.it.forced.srt", "Film.en.srt"…). */
+function srtFiles(subs) {
+  const seen = new Set(), files = [];
+  for (const s of subs) {
+    if (!s.text) continue;
+    let ext = lang3(s.lang) === 'und' ? 'srt' : `${(s.lang || '').toLowerCase()}.srt`;
+    if (s.forced) ext = ext.replace(/srt$/, 'forced.srt');
+    let k = 2;
+    while (seen.has(ext)) ext = ext.replace(/(\.\d+)?\.srt$/, `.${k++}.srt`);
+    seen.add(ext);
+    const blob = new Blob([vttToSrt(s.text)], { type: 'application/x-subrip' });
+    files.push({ url: URL.createObjectURL(blob), ext, size: blob.size });
+  }
+  return files;
+}
+
+/** Only subtitles: each track becomes its own .srt file, no video or audio downloaded. */
+async function runSubs(jobId, spec, job, emit, bridge) {
+  const fetchOpts = { signal: job.ctrl.signal, credentials: 'include' };
+  const ensureHosts = (urls) => bridge.ensureHosts(jobId, urls);
+  const subs = spec.subs.map((s) => ({ ...s }));
+  for (let i = 0; i < subs.length; i++) {
+    emit({ state: 'running', stage: m('eng_stageSubs'), progress: 0.98 * i / subs.length, speed: null, eta: null });
+    subs[i].text = await downloadSubtitles(subs[i].url, { fetchOpts, base: 'auto', ensureHosts });
+  }
+  const files = srtFiles(subs);
+  if (!files.length) throw new Error(m('eng_emptyPlaylist'));
+  files[0].main = true;
+  job.urls = files.map((f) => f.url);
+  return files;
 }
 
 async function run(jobId, spec, job, emit, bridge) {
@@ -159,20 +191,8 @@ async function run(jobId, spec, job, emit, bridge) {
   for (let i = 0; i < dls.length; i++) await job.dir.removeEntry(`t${i}`).catch(() => {});
 
   const files = [{ url: URL.createObjectURL(file), ext: container, size: file.size, main: true }];
-  if (container === 'mp4') {
-    // Subtitles as .srt next to the video: players pick them up automatically.
-    const seen = new Set();
-    for (const s of subs) {
-      if (!s.text) continue;
-      let ext = lang3(s.lang) === 'und' ? 'srt' : `${(s.lang || '').toLowerCase()}.srt`;
-      if (s.forced) ext = ext.replace(/srt$/, 'forced.srt');
-      let k = 2;
-      while (seen.has(ext)) ext = ext.replace(/(\.\d+)?\.srt$/, `.${k++}.srt`);
-      seen.add(ext);
-      const blob = new Blob([vttToSrt(s.text)], { type: 'application/x-subrip' });
-      files.push({ url: URL.createObjectURL(blob), ext, size: blob.size });
-    }
-  }
+  // MP4: subtitles as .srt next to the video, players pick them up automatically
+  if (container === 'mp4') files.push(...srtFiles(subs));
   job.urls = files.map((f) => f.url);
   return files;
 }

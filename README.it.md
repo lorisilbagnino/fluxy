@@ -94,6 +94,9 @@ con *Rileva*.
 
 - **Video**: preselezionata la qualità più alta. **Audio / Sottotitoli**: preselezionate le lingue preferite
   (predefinite: la lingua del browser e l'inglese).
+- **Solo sottotitoli**: ogni riga dei sottotitoli ha il link **.srt** che salva solo quella traccia; senza video né
+  audio selezionati, *Scarica* salva ogni sottotitolo scelto come `.srt` separato ("Film.it.srt",
+  "Film.it.forced.srt"…), con gli orari allineati all'inizio del video.
 - **MKV** consigliato. **MP4**: sottotitoli `.srt` accanto al video (motore nel browser) o `mov_text` (app locale).
 - Motore nel browser: durante il lavoro serve circa **2× la dimensione del film** su disco (controllato prima di
   iniziare).

@@ -452,7 +452,10 @@ async function startDownload({ tabId, streamId, videoId, audioIds, subIds, conta
   const video = d.video.find((v) => v.id === videoId) || null;
   const audio = pick(d.audio, audioIds || []);
   const subs = pick(d.subs, subIds || []);
-  if (!video && !audio.length) throw new Error(tx('errPickOne'));
+  if (!video && !audio.length) {
+    if (subs.length) return startSubsDownload(s, d, subs, filename, settings);
+    throw new Error(tx('errPickOne'));
+  }
 
   // Only HLS has an in-browser engine: DASH and yt-dlp pages need the native host (their analysis already did).
   const engine = d.kind === 'hls' ? settings.engine : 'native';
@@ -586,6 +589,28 @@ async function analyseFile(stream) {
   }
 }
 
+/** Only subtitles: .srt files (HLS in the browser; DASH / yt-dlp pages through the local app). */
+async function startSubsDownload(s, d, subs, filename, settings) {
+  const engine = d.kind === 'hls' ? 'browser' : 'native';
+  if (engine === 'browser') await browserEngine.prepare();
+  const jobId = crypto.randomUUID().slice(0, 12);
+  const name = filename || s.title;
+  const spec = {
+    kind: 'subs', url: s.url, headers: s.headers, subs, video: null, audio: [], filename: name, title: name,
+    outputDir: settings.outputDir, duration: d.duration, strings: engine === 'browser' ? engineStrings() : undefined,
+  };
+  await mutateJobs((jobs) => {
+    jobs[jobId] = {
+      id: jobId, engine, filename: name, container: 'srt', describe: subs.map((x) => x.lang || '?').join(' · '),
+      state: 'running', progress: 0, stage: tx('stageQueued'), startedAt: Date.now(),
+      headers: engine === 'browser' ? s.headers : undefined,
+    };
+  });
+  if (engine === 'browser') await browserEngine.start(jobId, spec);
+  else hostSend({ type: 'download', jobId, spec });
+  return jobId;
+}
+
 /** Direct files: one GET (parallel ranges when the server allows them) straight to Downloads, no muxing. */
 async function startFileDownload(s, d, sourceId, filename) {
   const src = d.video.find((x) => x.id === sourceId) || d.video[0];
@@ -712,7 +737,8 @@ async function saveFiles(jobId, files) {
   const mainId = await chrome.downloads.download({ url: main.url, filename: `${safeName(j.filename)}.${main.ext}`, conflictAction: 'uniquify', saveAs: false });
   ids.push(mainId);
   // sidecar subtitles follow the name the browser actually gave the video ("film (1).mp4" → "film (1).it.srt")
-  const stem = basename(await downloadFilename(mainId)).replace(/\.[^.]+$/, '') || safeName(j.filename);
+  const got = basename(await downloadFilename(mainId));
+  const stem = (got.endsWith(`.${main.ext}`) ? got.slice(0, -main.ext.length - 1) : got.replace(/\.[^.]+$/, '')) || safeName(j.filename);
   for (const f of files.filter((x) => !x.main)) {
     ids.push(await chrome.downloads.download({ url: f.url, filename: `${stem}.${f.ext}`, conflictAction: 'uniquify', saveAs: false }));
   }
