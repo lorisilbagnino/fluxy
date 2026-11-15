@@ -1,0 +1,59 @@
+name: Build e release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Versione dal manifest
+        id: version
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("extension/manifest.json"))["version"])')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Release già esistente?
+        id: exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::La release ${{ steps.version.outputs.tag }} esiste già: aumenta la versione in extension/manifest.json per pubblicarne una nuova."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build
+        run: ./build.py
+
+      - name: Pubblica la release
+        if: steps.exists.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --target "$GITHUB_SHA" \
+            --title "Flux Capacitor ${{ steps.version.outputs.version }}" \
+            --generate-notes \
+            "dist/flux-capacitor-${{ steps.version.outputs.version }}-chromium.zip" \
+            "dist/flux-capacitor-${{ steps.version.outputs.version }}-firefox.xpi" \
+            host/flux_host.py \
+            host/install.sh
