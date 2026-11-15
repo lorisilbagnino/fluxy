@@ -4,7 +4,7 @@
 // Lives in the offscreen document (Chromium) or in the background page (Firefox).
 // `bridge` is how it talks to the background: emit(jobId, fields), ensureHosts(jobId, urls).
 
-import { downloadTrack, mux, vttToSrt, lang3 } from './engine.js';
+import { downloadTrack, downloadFile, mux, vttToSrt, lang3 } from './engine.js';
 import { setMaxConnections, CancelledError } from './net.js';
 import { m, setStrings } from './i18n.js';
 
@@ -32,7 +32,7 @@ export async function startJob(jobId, spec, bridge) {
   const emit = (f) => bridge.emit(jobId, f);
   setStrings(spec.strings);
   try {
-    const res = await run(jobId, spec, job, emit, bridge);
+    const res = await (spec.kind === 'file' ? runFile : run)(jobId, spec, job, emit, bridge);
     emit({ state: 'saving', progress: 0.99, stage: m('eng_stageSaving'), speed: null, eta: null, files: res });
   } catch (e) {
     const cancelled = e instanceof CancelledError || ctrl.signal.aborted;
@@ -50,6 +50,43 @@ export async function cleanupJob(jobId) {
   for (const u of job?.urls || []) URL.revokeObjectURL(u);
   const root = await opfsRoot();
   await root.removeEntry(JOB_PREFIX + jobId, { recursive: true }).catch(() => {});
+}
+
+/** A direct file: download (parallel ranges when possible) and hand it over as is. */
+async function runFile(jobId, spec, job, emit, bridge) {
+  const signal = job.ctrl.signal;
+  const fetchOpts = { signal, credentials: 'include' };
+  setMaxConnections(spec.parallel || 8);
+  if (spec.size && navigator.storage.estimate) {
+    const { quota = 0, usage = 0 } = await navigator.storage.estimate();
+    if (quota && quota - usage < spec.size * 1.05) throw new Error(m('eng_noSpace', gb(spec.size), gb(quota - usage)));
+  }
+  await cleanupOrphans().catch(() => {});
+  job.dir = await (await opfsRoot()).getDirectoryHandle(JOB_PREFIX + jobId, { create: true });
+  let lastEmit = 0, lastBytes = 0, lastT = performance.now(), speed = null;
+  const report = (p, force) => {
+    const now = performance.now();
+    if (!force && now - lastEmit < 500) return;
+    if (now - lastT > 1000) {
+      const inst = (p.bytes - lastBytes) / ((now - lastT) / 1000);
+      speed = speed == null ? inst : speed * 0.7 + inst * 0.3;
+      lastBytes = p.bytes; lastT = now;
+    }
+    lastEmit = now;
+    emit({
+      state: 'running', stage: m('eng_stageDownload1'), progress: p.total ? 0.98 * Math.min(1, p.bytes / p.total) : 0,
+      speed, eta: speed > 0 && p.total ? Math.max(0, (p.total - p.bytes) / speed) : null,
+    });
+  };
+  report({ bytes: 0, total: spec.size || 0 }, true);
+  const file = await downloadFile(spec.url, {
+    dir: job.dir, name: `file.${spec.ext || 'bin'}`, fetchOpts, parallel: Math.min(6, spec.parallel || 6),
+    size: spec.size, ranges: spec.ranges, onProgress: (p) => report(p),
+    ensureHosts: (urls) => bridge.ensureHosts(jobId, urls),
+  });
+  const url = URL.createObjectURL(file);
+  job.urls = [url];
+  return [{ url, ext: spec.ext || 'bin', size: file.size, main: true }];
 }
 
 async function run(jobId, spec, job, emit, bridge) {

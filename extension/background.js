@@ -4,7 +4,7 @@
 // Detects HLS/DASH manifests, analyses them, runs downloads with the in-browser
 // engine (offscreen document / background page) or the optional native host.
 
-import { DEFAULT_SETTINGS, childSet, isChild, isBlockedUrl } from './shared.js';
+import { DEFAULT_SETTINGS, childSet, isChild, isBlockedUrl, EMBED_PLAYER_RE } from './shared.js';
 import { probeHls } from './engine/hls.js';
 import { fetchText } from './engine/net.js';
 import { engineStrings } from './engine/i18n.js';
@@ -191,7 +191,8 @@ function onManifest(tabId, info) {
 async function autoProbe(tabId, streamId, attempt = 0) {
   const t = await loadTab(tabId);
   const s = t.streams.find((x) => x.id === streamId);
-  if (!s || s.probe) return;
+  if (!s || s.probe || s.manual) return;
+  if (s.kind === 'file') return probeStream(tabId, streamId);
   if (isChild(s, childSet(t.streams))) return; // already described by a master playlist
   // A master playlist is being analysed: wait for it, it will probably cover this one.
   // (streams detected earlier and not analysed yet count too: their probe may not have started)
@@ -240,6 +241,7 @@ async function probePage(tabId) {
 
 // HLS is analysed here (no native host needed); DASH and pages need the native host (yt-dlp).
 async function analyse(stream) {
+  if (stream.kind === 'file') return analyseFile(stream);
   if (stream.kind === 'hls' || /\.m3u8(?:[?#;]|$)/i.test(stream.url)) {
     const key = `probe:${stream.id}`;
     try {
@@ -445,6 +447,7 @@ async function startDownload({ tabId, streamId, videoId, audioIds, subIds, conta
   if (!s || s.probe?.status !== 'ok') throw new Error(tx('errNotAnalysed'));
   const d = s.probe.data;
   const settings = await getSettings();
+  if (d.kind === 'file') return startFileDownload(s, d, videoId, filename);
   const pick = (list, ids) => list.filter((x) => ids.includes(x.id));
   const video = d.video.find((v) => v.id === videoId) || null;
   const audio = pick(d.audio, audioIds || []);
@@ -477,6 +480,141 @@ async function startDownload({ tabId, streamId, videoId, audioIds, subIds, conta
   }
   return jobId;
 }
+
+// ------------------------------------------------------- page scanning ---
+// When the popup opens (and after "Detect" reloads an armed tab) scanner.js reads
+// every frame of the tab: <video> files, video links, og:video / JSON-LD, player
+// configurations with .m3u8/.mpd/.mp4 URLs, embedded players. Nothing has to play.
+const originOf = (u) => { try { return new URL(u).origin; } catch { return ''; } };
+const extOf = (u, type) => {
+  const m = /\.([a-z0-9]{2,4})(?:[?#]|$)/i.exec(new URL(u).pathname);
+  if (m) return m[1].toLowerCase();
+  return { 'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'audio/ogg': 'ogg' }[(type || '').split(';')[0]] || 'mp4';
+};
+
+async function scanTab(tabId) {
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (!tab || !/^https?:/.test(tab.url || '') || isBlockedUrl(tab.url)) return { frames: 0 };
+  let results;
+  try {
+    results = await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ['scanner.js'] });
+  } catch (e) {
+    return { frames: 0, error: e.message };
+  }
+  const frames = results.map((r) => r.result).filter(Boolean);
+  const pageTitle = tab.title || '';
+  const added = [];
+  await withTab(tabId, (t) => {
+    const known = new Set();
+    for (const s of t.streams) { known.add(s.url); for (const src of s.sources || []) known.add(src.url); }
+    const push = (stream) => {
+      if (known.has(stream.url) || isBlockedUrl(stream.url)) return;
+      for (const src of stream.sources || []) known.add(src.url);
+      known.add(stream.url);
+      t.streams.push({ id: crypto.randomUUID().slice(0, 8), detectedAt: Date.now(), probe: null, pageUrl: tab.url, from: 'scan', ...stream });
+      added.push(t.streams.at(-1));
+    };
+    const headersFor = (frameUrl, kind) => {
+      const h = { Referer: frameUrl };
+      if (kind !== 'file') h.Origin = originOf(frameUrl);   // players fetch playlists with CORS requests
+      return h;
+    };
+    let blob = 0, drm = 0;
+    for (const f of frames) {
+      // inside an embedded player of another site: its internals are covered by the embed card (yt-dlp)
+      if (!f.top && EMBED_PLAYER_RE.test(f.frameUrl)) continue;
+      blob += f.blobVideos || 0; drm += f.drmVideos || 0;
+      const title = (v) => v || f.ogTitle || (f.top ? pageTitle : f.title) || pageTitle;
+      for (const v of f.videos) {
+        const files = v.sources.filter((x) => x.kind === 'file');
+        for (const m of v.sources.filter((x) => x.kind !== 'file')) push({ url: m.url, kind: m.kind, headers: headersFor(f.frameUrl, m.kind), title: title(v.title) });
+        if (!files.length) continue;
+        push({
+          url: files[0].url, kind: 'file', headers: headersFor(f.frameUrl, 'file'), title: title(v.title),
+          sources: files.map((x) => ({ url: x.url, type: x.type, label: x.label, height: x.height })),
+          media: { tag: v.tag, visible: v.visible, area: v.area, duration: v.duration, width: v.width, height: v.height, muted: v.muted, loop: v.loop, autoplay: v.autoplay, controls: v.controls },
+        });
+      }
+      for (const u of f.urls) {
+        if (u.kind === 'file') push({ url: u.url, kind: 'file', headers: headersFor(f.frameUrl, 'file'), title: title(u.title), sources: [{ url: u.url }], media: { via: u.via, audio: !!u.audio } });
+        else push({ url: u.url, kind: u.kind, headers: headersFor(f.frameUrl, u.kind), title: title(u.title) });
+      }
+      for (const e of f.embeds) {
+        push({ url: e.url, kind: 'page', manual: true, embed: true, headers: {}, title: e.title || title('') });
+      }
+    }
+    t.scan = { at: Date.now(), frames: frames.length, blobVideos: blob, drmVideos: drm };
+  });
+  for (const s of added) if (!s.manual) setTimeout(() => autoProbe(tabId, s.id), s.kind === 'file' ? 0 : PROBE_DELAY_MS);
+  return { frames: frames.length, added: added.length };
+}
+
+/** Size, type and range support of each source of a direct file, without downloading it. */
+async function analyseFile(stream) {
+  const key = `probe:${stream.id}`;
+  await ensureHeaderHosts(key, stream.headers, stream.sources.map((x) => x.url));
+  try {
+    const probed = await Promise.all(stream.sources.slice(0, 8).map(async (src, i) => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15_000);
+      try {
+        const r = await fetch(src.url, { credentials: 'include', headers: { Range: 'bytes=0-0' }, signal: ctrl.signal });
+        if (!r.ok) return { ...src, error: `HTTP ${r.status}` };
+        const total = r.status === 206 ? parseInt((r.headers.get('content-range') || '').split('/')[1], 10) : parseInt(r.headers.get('content-length') || '', 10);
+        const type = r.headers.get('content-type') || src.type || '';
+        ctrl.abort();   // don't download the body of a 200 answer
+        if (/text\/html/i.test(type)) return { ...src, error: 'HTML' };
+        return { ...src, id: `f${i}`, size: Number.isFinite(total) ? total : null, ranges: r.status === 206, type, ext: extOf(src.url, type) };
+      } catch (e) {
+        return { ...src, error: e.name === 'AbortError' ? 'timeout' : e.message };
+      } finally {
+        clearTimeout(timer);
+      }
+    }));
+    const ok = probed.filter((x) => !x.error);
+    if (!ok.length) throw new Error(probed[0]?.error || tx('unknownError'));
+    const heightOf = (x) => x.height || parseInt(/(\d{3,4})p/.exec(x.label || x.url)?.[1] || '', 10) || null;
+    const video = ok.map((x) => ({ ...x, height: heightOf(x) }))
+      .sort((a, b) => ((b.height || 0) - (a.height || 0)) || ((b.size || 0) - (a.size || 0)));
+    const audioOnly = video.every((x) => /^audio\//i.test(x.type) || /^(mp3|m4a|aac|ogg|oga|opus|flac|wav)$/.test(x.ext));
+    return {
+      kind: 'file', master: true, audioOnly, duration: stream.media?.duration || null, live: false, drm: null, encryption: null,
+      video, audio: [], subs: [], childUrls: [],
+    };
+  } finally {
+    removeHeaderRule(key);
+  }
+}
+
+/** Direct files: one GET (parallel ranges when the server allows them) straight to Downloads, no muxing. */
+async function startFileDownload(s, d, sourceId, filename) {
+  const src = d.video.find((x) => x.id === sourceId) || d.video[0];
+  if (!src) throw new Error(tx('errPickOne'));
+  const settings = await getSettings();
+  await browserEngine.prepare();
+  const jobId = crypto.randomUUID().slice(0, 12);
+  const name = filename || s.title;
+  const spec = {
+    kind: 'file', url: src.url, size: src.size, ranges: src.ranges, ext: src.ext, headers: s.headers,
+    filename: name, title: name, parallel: Number(settings.fragments) || 8, strings: engineStrings(),
+  };
+  await mutateJobs((jobs) => {
+    jobs[jobId] = {
+      id: jobId, engine: 'browser', filename: name, container: src.ext,
+      describe: [src.height ? `${src.height}p` : src.label || null, src.size ? fmtBytes(src.size) : null].filter(Boolean).join(' · '),
+      state: 'running', progress: 0, stage: tx('stageQueued'), startedAt: Date.now(), headers: s.headers,
+    };
+  });
+  await browserEngine.start(jobId, spec);
+  return jobId;
+}
+
+const fmtBytes = (b) => (b >= 1073741824 ? `${(b / 1073741824).toFixed(2)} GB` : `${Math.max(0.1, b / 1048576).toFixed(1)} MB`);
+
+// After "Detect" reloads an armed tab, its new page is scanned as soon as it has loaded.
+chrome.tabs.onUpdated.addListener((tabId, info) => {
+  if (info.status === 'complete' && armed.has(tabId)) scanTab(tabId).catch(() => {});
+});
 
 // ---------------------------------------------------- browser engine ---
 // Chromium: offscreen document (the worker may be stopped mid-download).
@@ -697,6 +835,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
       case 'installer': return await downloadInstaller();
       case 'probe': await probeStream(msg.tabId, msg.streamId); return {};
       case 'probePage': return { streamId: await probePage(msg.tabId) };
+      case 'scan': return await scanTab(msg.tabId);
       case 'download': return { jobId: await startDownload(msg) };
       case 'cancel': await cancelJob(msg.jobId); return {};
       case 'reveal': await reveal(msg.jobId); return {};

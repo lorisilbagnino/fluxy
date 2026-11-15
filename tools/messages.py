@@ -37,7 +37,13 @@ M = {
     "prefLangs": ("Preferred languages (preselected)", "Lingue preferite (preselezionate)"),
     "downloads": ("Downloads", "Download"),
     "clearFinished": ("clear finished", "rimuovi completati"),
-    "streamsInTab": ("Streams in this tab", "Stream in questa scheda"),
+    "streamsInTab": ("Videos on this page", "Video in questa pagina"),
+    "otherVideos": ("Other videos ($1): previews, animated backgrounds, short clips", "Altri video ($1): anteprime, sfondi animati, clip brevi"),
+    "hintAdaptive": ("$1 video(s) on the page use an adaptive player: if the one you want isn't listed, press “Detect” and start it.",
+                     "$1 video della pagina usano un player adattivo: se quello che cerchi non è in elenco, premi “Rileva” e avvialo."),
+    "hintDrm": ("$1 video(s) on the page are DRM protected and can't be saved.", "$1 video della pagina sono protetti da DRM e non si possono salvare."),
+    "embedText": ("Player embedded from another site: the local app can analyse it with yt-dlp.", "Player incorporato da un altro sito: l'app locale può analizzarlo con yt-dlp."),
+    "fileOriginal": ("original file, saved as is", "file originale, salvato così com'è"),
     "clear": ("clear", "svuota"),
     "clearTitle": ("Clear the list", "Svuota l'elenco"),
     "stop": ("stop", "ferma"),
@@ -143,6 +149,7 @@ M = {
     "eng_stageSubs": ("Subtitles", "Sottotitoli"),
     "eng_stageMux": ("Merging into one file", "Unione in un unico file"),
     "eng_stageSaving": ("Saving", "Salvataggio"),
+    "eng_badRange": ("The server doesn't honour partial downloads: try again", "Il server non rispetta i download a pezzi: riprova"),
 }
 
 

@@ -44,6 +44,9 @@ export function isBlockedUrl(u) {
   try { return BLOCKED_HOST_RE.test(new URL(u).hostname); } catch { return false; }
 }
 
+/** Embedded players of other sites (same list as in scanner.js): handed to yt-dlp as a whole. */
+export const EMBED_PLAYER_RE = /^https?:\/\/(?:www\.)?(?:youtube(?:-nocookie)?\.com\/embed\/|player\.vimeo\.com\/video\/|(?:www\.)?dailymotion\.com\/embed\/|geo\.dailymotion\.com\/player|player\.twitch\.tv\/|clips\.twitch\.tv\/embed|streamable\.com\/[eo]\/|rumble\.com\/embed\/|(?:www\.)?facebook\.com\/plugins\/video|player\.bilibili\.com\/|fast\.wistia\.(?:net|com)\/embed\/|(?:www\.)?loom\.com\/embed\/|w\.soundcloud\.com\/player)/i;
+
 /** Pages that yt-dlp handles but that expose no HLS/DASH playlist to detect. */
 const PAGE_SITE_RE = /(^|\.)(youtube\.com|youtu\.be)$/i;
 export function isPageSite(u) {
