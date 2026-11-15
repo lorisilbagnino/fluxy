@@ -2,8 +2,7 @@
 // jobs run in this offscreen document. It only has chrome.runtime: progress
 // goes to the worker as messages.
 
-import { startJob, cancelJob, cleanupJob, cleanupOrphans, acceptRecording, isRecordingPort } from './engine/runner.js';
-import { setStrings } from './engine/i18n.js';
+import { startJob, cancelJob, cleanupJob, cleanupOrphans } from './engine/runner.js';
 
 const bridge = {
   emit: (jobId, fields) => chrome.runtime.sendMessage({ type: 'engineEvent', jobId, fields }).catch(() => {}),
@@ -20,13 +19,5 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   }
   reply({ ok: true });
 });
-
-// <video> recordings: the content script streams the chunks straight here.
-chrome.runtime.onConnect.addListener((port) => {
-  if (isRecordingPort(port)) acceptRecording(port, bridge);
-});
-
-// No chrome.i18n here: the localised engine strings come from the worker (recordings need them before any job spec).
-chrome.runtime.sendMessage({ type: 'engineStrings' }).then(setStrings).catch(() => {});
 
 cleanupOrphans().catch(() => {});

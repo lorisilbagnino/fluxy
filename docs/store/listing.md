@@ -128,8 +128,8 @@ Fluxy is free. If you find it useful, you can buy me a coffee: <KOFI_URL>
 **Categoria**: Strumenti (Tools) · **Lingua predefinita**: Inglese (+ Italiano)
 
 **Scopo unico** (Single purpose):
-> Fluxy saves the videos played by a web page as a single local video file: HLS/DASH streams with the video,
-> audio and subtitle tracks chosen by the user, or a recording of a WebRTC video (e.g. a video call) the user picks.
+> Fluxy saves the HLS/DASH video streams played by a web page as a single local video file, with the video,
+> audio and subtitle tracks chosen by the user.
 
 **Giustificazione dei permessi**:
 
@@ -143,7 +143,6 @@ Fluxy is free. If you find it useful, you can buy me a coffee: <KOFI_URL>
 | `unlimitedStorage` | Stages the downloaded segments in the extension's private storage (OPFS) before merging; a film can take several GB. |
 | `storage` | Keeps settings and the list of detected streams and downloads. |
 | `tabs` | Reads the active tab's title (default file name) and reloads the tab when the user presses "Detect". |
-| `scripting` | Only when the user presses "Record a video": injects the picker and recording panel into the tab, so the user can click the video to record and start/stop the recording. |
 | `nativeMessaging` | Optional local app (ffmpeg + yt-dlp) for DASH streams, used only if the user installs it. |
 
 **Codice remoto**: No, nessun codice remoto (tutto il JavaScript è nel pacchetto; Mediabunny è incluso).
