@@ -110,6 +110,44 @@ export function fmtSize(b) {
 
 
 // ------------------------------------------------------------ downloads ---
+// Renaming a job in place. The lists are redrawn at every progress update, so the draft (and the
+// caret) live here and are restored after each redraw (restoreEditFocus).
+const edits = new Map();   // jobId -> {value, caret}
+let rerender = () => {};
+export function setRerender(fn) { rerender = fn; }
+const RENAMABLE = ['running', 'paused', 'error', 'cancelled'];
+
+export function restoreEditFocus(root) {
+  const input = root.querySelector('input[data-edit]');
+  if (!input) return;
+  const e = edits.get(input.dataset.edit);
+  input.focus();
+  const c = e?.caret ?? input.value.length;
+  input.setSelectionRange(c, c);
+}
+
+function nameEditor(j, full) {
+  const draft = edits.get(j.id);
+  const commit = async () => {
+    const name = draft.value.trim();
+    edits.delete(j.id);
+    if (name && name !== j.filename) await send({ type: 'renameJob', jobId: j.id, filename: name });
+    rerender();
+  };
+  const cancel = () => { edits.delete(j.id); rerender(); };
+  const input = el('input', {
+    type: 'text', value: draft.value, 'data-edit': j.id, spellcheck: 'false',
+    oninput: (e) => { draft.value = e.target.value; draft.caret = e.target.selectionStart; },
+    onkeyup: (e) => { draft.caret = e.target.selectionStart; },
+    onclick: (e) => { draft.caret = e.target.selectionStart; },
+    onkeydown: (e) => { if (e.key === 'Enter') commit(); else if (e.key === 'Escape') cancel(); },
+  });
+  return el('span', { class: 'job-name-edit' }, input,
+    el('span', { class: 'file-ext' }, `.${j.container}`),
+    el('button', { class: full ? 'ghost accent' : 'link accent', title: t('renameSave'), onclick: commit }, '✓'),
+    el('button', { class: full ? 'ghost' : 'link', title: t('renameCancel'), onclick: cancel }, '✕'));
+}
+
 const ACTIVE = ['running', 'saving'];
 const langCodes = (list) => list.map((x) => `${(x.lang || '?').split(/[-_]/)[0].toUpperCase()}${x.forced ? ` (${t('forced')})` : ''}`).join(', ');
 
@@ -167,9 +205,14 @@ export function renderJob(j, { full = false } = {}) {
     ? el('span', { class: 'err', title: j.error || '' }, j.error || t('error'), expiredHint(j) ? el('span', { class: 'hint' }, ` ${t('hint403')}`) : null)
     : `${j.stage || ''}${summary && !full ? ` — ${summary}` : ''}`;
   return el('div', { class: `job ${j.state}${recording ? ' recording' : ''}${full ? ' full' : ''}` },
-    el('div', { class: 'job-top' },
-      el('span', { class: 'job-name', title: summary ? `${j.filename}.${j.container}\n${summary}` : j.output || '' }, `${j.filename}.${j.container}`),
-      ...jobButtons(j, full)),
+    edits.has(j.id) && RENAMABLE.includes(j.state)
+      ? el('div', { class: 'job-top' }, nameEditor(j, full))
+      : el('div', { class: 'job-top' },
+        el('span', { class: 'job-name', title: summary ? `${j.filename}.${j.container}\n${summary}` : j.output || '' }, `${j.filename}.${j.container}`),
+        RENAMABLE.includes(j.state) && j.kind !== 'record'
+          ? el('button', { class: full ? 'ghost' : 'link rename', title: t('rename'), onclick: () => { edits.set(j.id, { value: j.filename, caret: null }); rerender(); } }, '✎')
+          : null,
+        ...jobButtons(j, full)),
     full && summary ? el('div', { class: 'job-summary' }, summary) : null,
     el('div', { class: 'bar' }, el('i', { style: `width:${j.state === 'done' ? 100 : pct}%` })),
     el('div', { class: 'job-info' }, el('span', {}, info), el('span', {}, right)),

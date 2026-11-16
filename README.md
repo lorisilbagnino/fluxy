@@ -188,6 +188,8 @@ If you register the app from the repository with `./host/install.sh` and then mo
 - **Downloads page** (*open ↗* in the popup): every job with video quality, each audio track, each subtitle,
   engine, source page, destination, start time and retries, plus the same actions. The popup shows a one-line
   summary (*1080p · audio IT, EN · sub IT*).
+- **Rename while downloading** (✎): the name is used only when the file is saved, so it can change until then
+  (local app: until the merge finishes).
 - Removing a paused or failed download deletes its staged data.
 
 ## Debug

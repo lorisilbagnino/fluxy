@@ -2,16 +2,22 @@
 // Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
 // Downloads page: every job with its full details and actions (pause, resume, retry, cancel, show, remove).
 
-import { t, UI_LANG, translate, $, send, renderJob, sortJobs } from './ui.js';
+import { t, UI_LANG, translate, $, send, renderJob, sortJobs, setRerender, restoreEditFocus } from './ui.js';
+import { DONATE_URL } from './build-flags.js';
 
+let lastJobs = {};
 function render(jobs) {
+  lastJobs = jobs || {};
   const list = sortJobs(jobs);
   $('#empty').hidden = list.length > 0;
   const active = list.filter((j) => ['running', 'saving'].includes(j.state)).length;
   $('#counts').textContent = list.length ? t('managerCounts', active, list.length) : '';
   $('#btn-clear').hidden = !list.some((j) => ['done', 'error', 'cancelled'].includes(j.state));
   $('#list').replaceChildren(...list.map((j) => renderJob(j, { full: true })));
+  restoreEditFocus($('#list'));
 }
+setRerender(() => render(lastJobs));
+if (DONATE_URL) { $('#donate').href = DONATE_URL; $('#donate').hidden = false; }
 
 document.documentElement.lang = UI_LANG;
 translate();

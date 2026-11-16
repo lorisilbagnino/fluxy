@@ -12,6 +12,10 @@ Fluxy is © 2026 lorisilbagnino, GPL-3.0-or-later with the additional terms in `
 Mediabunny reads and writes the media containers of the in-browser engine (packet copy into MKV/MP4). Its source code
 is available at the address above, as section 3.2 of the MPL-2.0 requires.
 
+The Ko-fi cup (`icons/kofi-cup.png`) is Ko-fi's official logo, a trademark of Ko-fi Labs Ltd, taken unchanged from
+Ko-fi's own embed button (`storage.ko-fi.com/cdn/cup-border.png`); it is used only to link to the author's Ko-fi page,
+as Ko-fi allows creators to do.
+
 ## Used by the optional local app (not included: installed by the user)
 
 The local app (`fluxy_host.py`, Python standard library only) runs these programs as separate processes when the user

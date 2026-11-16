@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS, childSet, isChild, isBlockedUrl, isPageSite } from '.
 import { DONATE_URL } from './build-flags.js';
 import {
   t, UI_LANG, translate, $, send, el, langLabel, nameIsJustLang, prettyCodec, listFmt, channelsLabel,
-  fmtBitrate, fmtDuration, fmtSize, renderJob, sortJobs,
+  fmtBitrate, fmtDuration, fmtSize, renderJob, sortJobs, setRerender, restoreEditFocus,
 } from './ui.js';
 
 let tabId = null;
@@ -409,12 +409,16 @@ function renderStream(s) {
   return card;
 }
 
+let lastJobs = {};
 function renderJobs(jobs) {
+  lastJobs = jobs || {};
   const list = sortJobs(jobs);
   $('#jobs-head').hidden = list.length === 0;
   $('#btn-clear-jobs').hidden = !list.some((j) => ['done', 'error', 'cancelled'].includes(j.state));
   $('#jobs').replaceChildren(...list.map((j) => renderJob(j)));
+  restoreEditFocus($('#jobs'));
 }
+setRerender(() => renderJobs(lastJobs));
 
 // -------------------------------------------------------------- settings ---
 function saveSettings() {

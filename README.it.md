@@ -118,6 +118,8 @@ Vedi le sezioni corrispondenti del [README inglese](README.md#debug). In breve: 
 - **Pagina dei download** (*apri ↗* nel popup): ogni download con qualità video, tracce audio, sottotitoli, motore,
   pagina di origine, destinazione, ora di avvio e tentativi, con le stesse azioni. Nel popup c'è un riepilogo su una
   riga (*1080p · audio IT, EN · sub IT*).
+- **Rinomina durante il download** (✎): il nome serve solo al salvataggio, quindi si può cambiare fino ad allora
+  (app locale: fino alla fine dell'unione).
 - Rimuovendo un download in pausa o fallito si cancellano anche i suoi dati temporanei.
 
 ## Licenza

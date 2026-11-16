@@ -29,7 +29,7 @@ import traceback
 import urllib.parse
 import urllib.request
 
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 CACHE_DIR = os.path.join(os.path.expanduser("~/.cache"), "fluxy")
 LOG_FILE = os.path.join(CACHE_DIR, "host.log")
 UA_FALLBACK = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -879,7 +879,6 @@ class Job:
 
         # ---- mux ----------------------------------------------------------
         title = s.get("title") or "video"
-        final = unique_path(os.path.join(out_dir, safe_filename(s.get("filename") or title) + "." + container))
         tmp_out = os.path.join(self.tmp, "out." + container)
         cmd = ["ffmpeg", "-nostdin", "-v", "error", "-y", "-progress", "pipe:1", "-nostats"]
         for _, _, f in files:
@@ -926,6 +925,8 @@ class Job:
 
         report(T("Merging into one file"), 0, mux_weight)
         self.run(cmd, on_mux)
+        # the name is read only now: it may have been changed while downloading ("rename")
+        final = unique_path(os.path.join(out_dir, safe_filename(s.get("filename") or title) + "." + container))
         os.replace(tmp_out, final)
         return final
 
@@ -973,6 +974,10 @@ def handle(msg: dict):
         job = JOBS.get(msg.get("jobId"))
         if job:
             job.cancel()
+    elif t == "rename":
+        job = JOBS.get(msg.get("jobId"))
+        if job and msg.get("filename"):
+            job.spec["filename"] = msg["filename"]
     elif t in ("pause", "resume"):
         job = JOBS.get(msg.get("jobId"))
         if job:

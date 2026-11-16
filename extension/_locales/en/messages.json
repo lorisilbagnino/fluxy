@@ -117,7 +117,16 @@
     "message": "copied ✓"
   },
   "donate": {
-    "message": "Support Fluxy ♥"
+    "message": "Support Fluxy on Ko-fi"
+  },
+  "rename": {
+    "message": "Rename the file"
+  },
+  "renameSave": {
+    "message": "Save the name (Enter)"
+  },
+  "renameCancel": {
+    "message": "Cancel (Esc)"
   },
   "credits": {
     "message": "Fluxy $p1$ — by lorisilbagnino · GPL-3.0 license",

@@ -955,6 +955,25 @@ async function refreshSpec(j) {
   return { ...spec, url: fresh.s.url, headers: fresh.s.headers || spec.headers, video, audio, subs };
 }
 
+/**
+ * Rename while downloading: the name is only used when the file is saved (browser engine: at the end of the
+ * job; local app: when the merge finishes), so updating it is enough. Too late once the file is being saved.
+ */
+async function renameJob(jobId, filename) {
+  const name = safeName(filename);
+  const j = (await getJobs())[jobId];
+  if (!name || !j || !['running', 'paused', 'error', 'cancelled'].includes(j.state)) return;
+  await mutateJobs((jobs) => {
+    const x = jobs[jobId];
+    if (!x) return;
+    x.filename = name;
+    if (x.spec) x.spec = { ...x.spec, filename: name, title: name };
+  });
+  if (j.engine !== 'browser' && ['running', 'paused'].includes(j.state)) {
+    try { hostSend({ type: 'rename', jobId, filename: name }); } catch {}
+  }
+}
+
 /** The downloads page: focus it if already open. */
 async function openManager() {
   const url = chrome.runtime.getURL('downloads.html');
@@ -999,6 +1018,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
       case 'pause': await pauseJob(msg.jobId); return {};
       case 'resume': await resumeJob(msg.jobId); return {};
       case 'retry': await retryJob(msg.jobId); return {};
+      case 'renameJob': await renameJob(msg.jobId, msg.filename); return {};
       case 'openManager': await openManager(); return {};
       case 'clearTab': await clearTab(msg.tabId); return {};
       case 'arm': await armTab(msg.tabId); return {};

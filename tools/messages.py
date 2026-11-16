@@ -53,7 +53,10 @@ M = {
     "copyUrl": ("copy URL", "copia URL"),
     "copyUrlTitle": ("Copy the manifest URL", "Copia l'URL del manifest"),
     "copied": ("copied ✓", "copiato ✓"),
-    "donate": ("Support Fluxy ♥", "Sostieni Fluxy ♥"),
+    "donate": ("Support Fluxy on Ko-fi", "Sostieni Fluxy su Ko-fi"),
+    "rename": ("Rename the file", "Rinomina il file"),
+    "renameSave": ("Save the name (Enter)", "Salva il nome (Invio)"),
+    "renameCancel": ("Cancel (Esc)", "Annulla (Esc)"),
     "credits": ("Fluxy $1 — by lorisilbagnino · GPL-3.0 license", "Fluxy $1 — di lorisilbagnino · licenza GPL-3.0"),
     # popup: dynamic
     "langUnknown": ("Unknown language", "Lingua sconosciuta"),

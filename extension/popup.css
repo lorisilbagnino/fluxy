@@ -136,8 +136,6 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 .page-card { gap: 10px; }
 .page-card > span { flex: 1; font-size: 12px; color: var(--muted); }
 .page-card b { color: var(--text); font-weight: 600; }
-.donate { justify-self: start; font-size: 12px; color: var(--accent); text-decoration: none; }
-.donate:hover { text-decoration: underline; }
 .credits { justify-self: start; font-size: 11px; color: var(--muted); text-decoration: none; }
 .credits:hover { color: var(--text); text-decoration: underline; }
 
@@ -153,3 +151,15 @@ details.noise[open] > summary { margin-bottom: 8px; }
 .link.accent { color: var(--accent); }
 .job.paused .bar > i { background: var(--muted); }
 .err .hint { color: var(--muted); }
+
+/* Ko-fi button: light pill so the official cup (dark outline) reads on both themes */
+.donate {
+  display: inline-flex; align-items: center; gap: 7px; justify-self: start; text-decoration: none;
+  background: #ffffff; color: #202020; border: 1px solid #e3e3e3; border-radius: 999px;
+  padding: 4px 12px 4px 8px; font-size: 12.5px; font-weight: 600; line-height: 1.2;
+}
+.donate:hover { background: #f4f4f4; text-decoration: none; }
+.donate img { width: 20px; height: auto; display: block; }
+.job-name-edit { flex: 1; min-width: 0; display: flex; gap: 8px; align-items: center; }
+.job-name-edit input { flex: 1; min-width: 0; }
+.link.rename { text-decoration: none; font-size: 13px; }
