@@ -92,3 +92,9 @@ button { font: inherit; cursor: pointer; }
 .track { font-size: 12px; grid-template-columns: minmax(0, 11em) 1fr 3.5em; }
 .overall { margin-bottom: 14px; padding: 10px 14px; }
 .overall-top { font-size: 13px; }
+
+.job-stats { display: inline-flex; gap: 8px; align-items: baseline; }
+.conns { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+.speed-limit-wrap { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); }
+.speed-limit-wrap select { width: auto; padding: 2px 4px; font-size: 12px; }
+.speed-limit-wrap select { padding: 4px 8px; font-size: 13px; }

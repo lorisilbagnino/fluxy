@@ -146,6 +146,10 @@ const ready = (async () => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.settings
     && changes.settings.newValue?.maxJobs !== changes.settings.oldValue?.maxJobs) pumpQueue();
+  if (area === 'local' && changes.settings
+    && changes.settings.newValue?.speedLimit !== changes.settings.oldValue?.speedLimit) {
+    browserEngine.setLimit(speedLimitBps({ ...DEFAULT_SETTINGS, ...changes.settings.newValue })).catch(() => {});
+  }
   if (area === 'local' && changes.settings) {
     autoDetect = { ...DEFAULT_SETTINGS, ...changes.settings.newValue }.autoDetect;
     refreshListening();
@@ -442,7 +446,7 @@ function updateJob(jobId, msg) {
   return mutateJobs((jobs) => {
     const j = jobs[jobId];
     if (!j) return;
-    for (const k of ['state', 'progress', 'stage', 'speed', 'eta', 'output', 'error', 'tracks']) {
+    for (const k of ['state', 'progress', 'stage', 'speed', 'eta', 'output', 'error', 'tracks', 'bytes', 'total', 'approx', 'conns']) {
       if (msg[k] !== undefined) j[k] = msg[k];
     }
     if (msg.state && msg.state !== 'running' && msg.state !== 'saving') j.finishedAt = Date.now();
@@ -476,15 +480,21 @@ function pumpQueue() {
         running++;
       }
     });
+    const rateLimit = speedLimitBps(settings);
+    const nativeRunning = Object.values(await getJobs()).filter((x) => x.engine !== 'browser' && x.state === 'running').length;
     for (const j of launch) {
       if (j.resumeNative) { await updateJobRaw(j.id, { resumeNative: undefined }); hostSend({ type: 'resume', jobId: j.id }); }
-      else if (j.engine === 'browser') await browserEngine.start(j.id, { ...j.spec, strings: engineStrings() });
-      else hostSend({ type: 'download', jobId: j.id, spec: j.spec });
+      else if (j.engine === 'browser') await browserEngine.start(j.id, { ...j.spec, speedLimit: rateLimit, strings: engineStrings() });
+      // yt-dlp limits each process: the local app's share of the limit is split among its running downloads
+      else hostSend({ type: 'download', jobId: j.id, spec: { ...j.spec, speedLimit: rateLimit ? Math.floor(rateLimit / Math.max(1, nativeRunning)) : 0 } });
       if (j.engine === 'browser') keepAlive();
     }
   }).catch((e) => console.error('[flux] queue', e));
   return pumping;
 }
+
+/** settings.speedLimit is in MB/s (0 = no limit); the engines want bytes per second. */
+const speedLimitBps = (settings) => Math.round(Math.max(0, Number(settings.speedLimit) || 0) * 1048576);
 
 const updateJobRaw = (jobId, fields) => mutateJobs((jobs) => { if (jobs[jobId]) Object.assign(jobs[jobId], fields); });
 
@@ -743,6 +753,7 @@ function localEngine() {
     start: async (jobId, spec) => { const r = await load(); keepAlive(); r.startJob(jobId, spec, bridge); },
     cancel: async (jobId) => (await load()).cancelJob(jobId, bridge),
     pause: async (jobId) => (await load()).pauseJob(jobId),
+    setLimit: async (bps) => (await load()).setSpeedLimit(bps),
     cleanup: async (jobId) => (await load()).cleanupJob(jobId),
   };
 }
@@ -770,6 +781,7 @@ function offscreenEngine() {
     start: (jobId, spec) => send('start', { jobId, spec }),
     cancel: (jobId) => send('cancel', { jobId }),
     pause: (jobId) => send('pause', { jobId }),
+    setLimit: async (bps) => { if (await chrome.offscreen.hasDocument()) await send('speedLimit', { bytesPerSecond: bps }); },
     cleanup: async (jobId) => { if (await chrome.offscreen.hasDocument()) await send('cleanup', { jobId }); },
   };
 }

@@ -29,7 +29,7 @@ import traceback
 import urllib.parse
 import urllib.request
 
-VERSION = "0.9.0"
+VERSION = "0.10.0"
 CACHE_DIR = os.path.join(os.path.expanduser("~/.cache"), "fluxy")
 LOG_FILE = os.path.join(CACHE_DIR, "host.log")
 UA_FALLBACK = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -752,6 +752,11 @@ class Job:
         tlabels = [(r, (f"{t['height']}p" if r == "video" and t.get("height") else (t.get("lang") or ""))) for r, t in tracks]
         tlabels += [("sub", (x.get("lang") or "") + (" forced" if x.get("forced") else "")) for x in subs]
         tf = [0.0] * len(tlabels)
+        # bytes of each track: estimated from the declared bitrate until yt-dlp tells us more
+        tb = [0] * len(tracks)
+        tt = [int((t.get("bandwidth") or 0) * (duration or 0) / 8) for _, t in tracks]
+        tdone = [False] * len(tracks)
+        conns = {"v": None}      # shown as "connections" while a track is downloading
 
         # Progress weights from bitrate (fallbacks: video 3 Mbps, audio 128 kbps)
         weights = [(t.get("bandwidth") or (3_000_000 if r == "video" else 128_000)) for r, t in tracks]
@@ -763,9 +768,12 @@ class Job:
         def report(stage, frac_of_current, cur_w, idx=None, **extra):
             if idx is not None:
                 tf[idx] = max(tf[idx], min(1.0, frac_of_current))
+            known = all(tt) and bool(tt)
             self.emit(state="running", stage=stage,
                       progress=min(0.999, (done_w + cur_w * frac_of_current) / total_w),
-                      tracks=[{"k": k, "l": l, "f": round(f, 3)} for (k, l), f in zip(tlabels, tf)], **extra)
+                      tracks=[{"k": k, "l": l, "f": round(f, 3)} for (k, l), f in zip(tlabels, tf)],
+                      bytes=sum(tb), total=sum(tt) if known else None, approx=not all(tdone),
+                      conns=conns["v"], **extra)
 
         files = []
         n = len(tracks)
@@ -779,6 +787,8 @@ class Job:
             if os.path.exists(marker) and found:
                 files.append((role, t, found[0]))
                 tf[i] = 1.0
+                tb[i] = tt[i] = os.path.getsize(found[0])
+                tdone[i] = True
                 done_w += weights[i]
                 continue
             for f in glob.glob(prefix + ".*"):      # leftovers of an interrupted attempt
@@ -795,8 +805,10 @@ class Job:
                     sx = float(sx[1]) if sx else 0
                     sz = FF_SIZE_RE.search(line)
                     speed = None
+                    conns["v"] = {"active": 1, "max": 1}
                     if sz:
                         nbytes = int(sz[1]) * 1024
+                        tb[idx] = nbytes
                         now = time.time()
                         if ff["t"] and now > ff["t"]:
                             speed = (nbytes - ff["bytes"]) / (now - ff["t"])
@@ -807,6 +819,9 @@ class Job:
                     p = json.loads(line[7:])
                     total = p.get("total_bytes") or p.get("total_bytes_estimate")
                     frac = (p.get("downloaded_bytes") or 0) / total if total else 0
+                    tb[idx] = int(p.get("downloaded_bytes") or 0)
+                    if total:
+                        tt[idx] = int(total)
                     if p.get("fragment_count"):
                         frac = max(frac, (p.get("fragment_index") or 0) / p["fragment_count"])
                     report(stage, frac, w, idx=idx, speed=p.get("speed"), eta=p.get("eta"))
@@ -816,6 +831,9 @@ class Job:
                    "--retries", "10", "--fragment-retries", "20",
                    "--progress-template", "download:FCPROG %(progress)j",
                    *ytdlp_header_args(headers), "-o", prefix + ".%(ext)s"]
+            if s.get("speedLimit"):
+                cmd += ["--limit-rate", str(max(1024, int(s["speedLimit"])))]   # bytes/s
+            conns["v"] = {"active": None, "max": int(s.get("fragments") or 8)}
             if t.get("formatId"):
                 info_path = info_cache_path(s["url"])
                 if not os.path.exists(info_path):
@@ -830,8 +848,11 @@ class Job:
             open(marker, "w").close()
             files.append((role, t, found[0]))
             tf[i] = 1.0
+            tb[i] = tt[i] = os.path.getsize(found[0])
+            tdone[i] = True
             done_w += weights[i]
 
+        conns["v"] = None
         sub_files = []
         for j, sub in enumerate(subs):
             stage = T("Subtitles {lang} ({i}/{n})", lang=sub.get("lang") or "", i=j + 1, n=len(subs))

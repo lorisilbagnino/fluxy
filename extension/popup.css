@@ -153,3 +153,8 @@ header .gh:hover { color: var(--text); text-decoration: underline; }
 .overall { display: grid; gap: 5px; padding: 8px 12px; margin-bottom: 8px; border-radius: var(--radius); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); }
 .overall-top { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
 .job.queued .bar > i { background: var(--muted); }
+
+.job-stats { display: inline-flex; gap: 8px; align-items: baseline; }
+.conns { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+.speed-limit-wrap { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); }
+.speed-limit-wrap select { width: auto; padding: 2px 4px; font-size: 12px; }

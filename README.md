@@ -196,6 +196,12 @@ If you register the app from the repository with `./host/install.sh` and then mo
 - **Queue**: at most *Concurrent downloads* (settings, default 2) run at once; the others wait as *queued* and
   start in order (also after *retry* and *resume*). Each download shows one thin bar per track (video, each audio,
   each subtitle) under its own bar, and an overall bar sums up the active downloads.
+- **Progress details**: each download shows its connections (⇉ active/max in the browser engine; max for the local
+  app, yt-dlp doesn't report them), MB downloaded / total (*≈* while the total of a stream is estimated), speed, ETA;
+  the overall bar sums them up.
+- **Speed limit** (settings, and a quick ⏱ selector in the download lists): MB/s for all downloads together. In-browser
+  engine: a shared token bucket applied while data arrives, so changes take effect at once; local app: yt-dlp
+  `--limit-rate`, split among its running downloads, for the downloads started after the change.
 - **Rename while downloading** (✎): the name is used only when the file is saved, so it can change until then
   (local app: until the merge finishes).
 - Removing a paused or failed download deletes its staged data.

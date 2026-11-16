@@ -41,6 +41,10 @@ const HTML = `
       <input data-s="fragments" type="number" min="1" max="32">
     </label>
   </div>
+  <label><span data-i18n="speedLimit"></span>
+    <input data-s="speedLimit" type="number" min="0" step="0.5">
+    <small class="help" data-i18n="speedLimitHelp"></small>
+  </label>
   <label class="check">
     <input data-s="auto" type="checkbox">
     <span><span data-i18n="autoDetect"></span>
@@ -70,6 +74,7 @@ export async function mountSettings(root, { onChange } = {}) {
     set('container', 'value', settings.container);
     set('fragments', 'value', settings.fragments);
     set('maxJobs', 'value', settings.maxJobs);
+    set('speedLimit', 'value', settings.speedLimit || 0);
     set('langs', 'value', settings.langs);
     set('auto', 'checked', !!settings.autoDetect);
     q('dir-field').hidden = settings.engine !== 'native';
@@ -83,6 +88,7 @@ export async function mountSettings(root, { onChange } = {}) {
       container: q('container').value,
       fragments: Math.min(32, Math.max(1, parseInt(q('fragments').value, 10) || 8)),
       maxJobs: Math.min(10, Math.max(1, parseInt(q('maxJobs').value, 10) || DEFAULT_SETTINGS.maxJobs)),
+      speedLimit: Math.max(0, Math.round((parseFloat(String(q('speedLimit').value).replace(',', '.')) || 0) * 10) / 10),
       langs: q('langs').value,
       autoDetect: q('auto').checked,
       ...partial,
@@ -130,7 +136,7 @@ export async function mountSettings(root, { onChange } = {}) {
   fill();
   renderNative();
   for (const r of radios) r.addEventListener('change', () => save());
-  for (const k of ['dir', 'container', 'maxJobs', 'fragments', 'langs', 'auto']) q(k).addEventListener('change', () => save());
+  for (const k of ['dir', 'container', 'maxJobs', 'fragments', 'speedLimit', 'langs', 'auto']) q(k).addEventListener('change', () => save());
   q('install').addEventListener('click', install);
   q('verify').addEventListener('click', () => send({ type: 'hostCheck' }));
   chrome.storage.onChanged.addListener((changes, area) => {

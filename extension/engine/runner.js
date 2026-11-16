@@ -5,7 +5,8 @@
 // `bridge` is how it talks to the background: emit(jobId, fields), ensureHosts(jobId, urls).
 
 import { downloadTrack, downloadFile, downloadSubtitles, mux, vttToSrt, lang3 } from './engine.js';
-import { setMaxConnections, CancelledError } from './net.js';
+import { createPool, setSpeedLimit, CancelledError } from './net.js';
+export { setSpeedLimit };
 import { m, setStrings } from './i18n.js';
 
 const JOB_PREFIX = 'flux-job-';
@@ -33,6 +34,8 @@ export async function startJob(jobId, spec, bridge) {
   if (job?.running) return;
   if (!job) { job = { dir: null, urls: [], saved: { tracks: [], file: {} } }; jobs.set(jobId, job); }
   job.ctrl = new AbortController();
+  job.pool = createPool(spec.parallel || 8);   // "connections per download"
+  if (spec.speedLimit != null) setSpeedLimit(spec.speedLimit);
   job.running = true;
   job.pausing = false;
   const emit = (f) => bridge.emit(jobId, f);
@@ -84,8 +87,7 @@ export async function cleanupJob(jobId) {
 /** A direct file: download (parallel ranges when possible) and hand it over as is. */
 async function runFile(jobId, spec, job, emit, bridge) {
   const signal = job.ctrl.signal;
-  const fetchOpts = { signal, credentials: 'include' };
-  setMaxConnections(spec.parallel || 8);
+  const fetchOpts = { signal, credentials: 'include', pool: job.pool };
   if (spec.size && navigator.storage.estimate) {
     const { quota = 0, usage = 0 } = await navigator.storage.estimate();
     if (quota && quota - usage < spec.size * 1.05) throw new Error(m('eng_noSpace', gb(spec.size), gb(quota - usage)));
@@ -105,14 +107,18 @@ async function runFile(jobId, spec, job, emit, bridge) {
     emit({
       state: 'running', stage: m('eng_stageDownload1'), progress: p.total ? 0.98 * Math.min(1, p.bytes / p.total) : 0,
       speed, eta: speed > 0 && p.total ? Math.max(0, (p.total - p.bytes) / speed) : null,
+      bytes: p.bytes, total: p.total || null, approx: false, conns: { active: job.pool.active, max: job.pool.max },
     });
   };
-  report({ bytes: job.saved.file.bytes || 0, total: spec.size || 0 }, true);
+  const base = job.saved.file.bytes || 0;   // already on disk from an earlier run
+  const live = () => ({ bytes: Math.min(spec.size || Infinity, Math.max(job.saved.file.bytes || 0, base + job.pool.received)), total: spec.size || 0 });
+  report(live(), true);
+  const ticker = setInterval(() => report(live()), 700);
   const file = await downloadFile(spec.url, {
     dir: job.dir, name: `file.${spec.ext || 'bin'}`, fetchOpts, parallel: Math.min(6, spec.parallel || 6),
-    size: spec.size, ranges: spec.ranges, onProgress: (p) => report(p), state: job.saved.file,
+    size: spec.size, ranges: spec.ranges, onProgress: () => report(live()), state: job.saved.file,
     ensureHosts: (urls) => bridge.ensureHosts(jobId, urls),
-  });
+  }).finally(() => clearInterval(ticker));
   const url = URL.createObjectURL(file);
   job.urls = [url];
   return [{ url, ext: spec.ext || 'bin', size: file.size, main: true }];
@@ -136,7 +142,7 @@ function srtFiles(subs) {
 
 /** Only subtitles: each track becomes its own .srt file, no video or audio downloaded. */
 async function runSubs(jobId, spec, job, emit, bridge) {
-  const fetchOpts = { signal: job.ctrl.signal, credentials: 'include' };
+  const fetchOpts = { signal: job.ctrl.signal, credentials: 'include', pool: job.pool };
   const ensureHosts = (urls) => bridge.ensureHosts(jobId, urls);
   const subs = spec.subs.map((s) => ({ ...s }));
   for (let i = 0; i < subs.length; i++) {
@@ -152,9 +158,8 @@ async function runSubs(jobId, spec, job, emit, bridge) {
 
 async function run(jobId, spec, job, emit, bridge) {
   const signal = job.ctrl.signal;
-  const fetchOpts = { signal, credentials: 'include' };
+  const fetchOpts = { signal, credentials: 'include', pool: job.pool };
   const ensureHosts = (urls) => bridge.ensureHosts(jobId, urls);
-  setMaxConnections(spec.parallel || 8);
 
   // Disk space: staged tracks + final file ≈ 2× the film.
   const est = ((spec.video?.bandwidth || 0) + (spec.audio || []).reduce((a, t) => a + (t.bandwidth || 128000), 0)) * (spec.duration || 0) / 8;
@@ -182,10 +187,11 @@ async function run(jobId, spec, job, emit, bridge) {
   // ---- download (90% of the bar) -----------------------------------------
   const state = wanted.map((w) => ({ bytes: 0, done: 0, total: 0, guess: (w.bandwidth || (w.type === 'video' ? 3e6 : 128e3)) * (spec.duration || 600) / 8 }));
   let lastEmit = 0, lastBytes = 0, lastT = performance.now(), speed = null;
+  const base = job.saved.tracks.reduce((a, t) => a + (t?.bytes || 0), 0);   // already on disk from an earlier run
   const report = (force) => {
     const now = performance.now();
     if (!force && now - lastEmit < 500) return;
-    const bytes = state.reduce((a, s) => a + s.bytes, 0);
+    const bytes = Math.max(state.reduce((a, s) => a + s.bytes, 0), base + job.pool.received);
     const expected = state.reduce((a, s) => a + (s.done ? s.bytes / s.done * s.total : s.guess), 0);
     if (now - lastT > 1000) {
       const inst = (bytes - lastBytes) / ((now - lastT) / 1000);
@@ -198,9 +204,13 @@ async function run(jobId, spec, job, emit, bridge) {
       state: 'running', progress: 0.9 * frac, stage: wanted.length === 1 ? m('eng_stageDownload1') : m('eng_stageDownloadN', wanted.length),
       speed, eta: speed > 0 ? Math.max(0, (expected - bytes) / speed) : null,
       tracks: trackView(),
+      // the total of a stream is estimated from the average segment size until every track is complete
+      bytes, total: Math.round(expected), approx: !state.every((s) => s.total && s.done >= s.total),
+      conns: { active: job.pool.active, max: job.pool.max },
     });
   };
   report(true);
+  const ticker = setInterval(() => report(), 700);
   const dls = await Promise.all(wanted.map((w, i) => {
     const key = [w.type, w.height || '', w.lang || '', w.name || '', w.codec || ''].join('|');
     if (job.saved.tracks[i]?.key !== key) job.saved.tracks[i] = { key };
@@ -208,7 +218,7 @@ async function run(jobId, spec, job, emit, bridge) {
       dir: job.dir, name: `t${i}`, fetchOpts, parallel: spec.parallel || 8, ensureHosts, state: job.saved.tracks[i],
       onProgress: (p) => { Object.assign(state[i], p); report(); },
     });
-  }));
+  })).finally(() => clearInterval(ticker));
 
   // ---- mux ---------------------------------------------------------------
   const duration = Math.max(...dls.map((d) => d.duration)) || spec.duration;
@@ -220,7 +230,8 @@ async function run(jobId, spec, job, emit, bridge) {
   const tracks = wanted.map((w, i) => ({ dl: dls[i], type: w.type, lang: w.lang, name: w.name, optional: w.type === 'video' && !!w.maybeAudio }));
   // audio muxed inside the video rendition, when no separate audio was chosen
   if (spec.video && !(spec.audio || []).length) tracks.push({ dl: dls[0], type: 'audio', lang: spec.video.audioLang, optional: true });
-  emit({ state: 'running', progress: 0.9, stage, speed: null, eta: null });
+  emit({ state: 'running', progress: 0.9, stage, speed: null, eta: null, conns: null, approx: false,
+    total: dls.reduce((a, d) => a + d.file.size, 0), bytes: dls.reduce((a, d) => a + d.file.size, 0) });
   const file = await mux({
     tracks, subs, container, outHandle: out, duration, fetchOpts, ensureHosts,
     onStage: (s) => { stage = s; emit({ state: 'running', stage: s, tracks: trackView(s !== m('eng_stageSubs')) }); },

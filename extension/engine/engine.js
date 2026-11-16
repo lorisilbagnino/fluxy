@@ -10,7 +10,7 @@ import {
   EncodedVideoPacketSource, EncodedAudioPacketSource, TextSubtitleSource,
   MkvOutputFormat, Mp4OutputFormat,
 } from './mediabunny.min.mjs';
-import { fetchBytes, fetchText, CancelledError } from './net.js';
+import { fetchBytes, fetchText, CancelledError, throttle } from './net.js';
 import { parseMediaPlaylist } from './hls.js';
 import { m } from './i18n.js';
 
@@ -131,15 +131,23 @@ export async function downloadFile(url, { dir, name, fetchOpts, parallel = 6, si
       await Promise.all(Array.from({ length: Math.min(parallel, count - next) }, worker));
       await writing;
     } else {
-      const r = await fetch(url, { credentials: 'include', ...fetchOpts });
+      const { pool, ...init } = fetchOpts || {};
+      const r = await fetch(url, { credentials: 'include', ...init });
       if (!r.ok) throw new Error(m('eng_http', `HTTP ${r.status}`, new URL(url).hostname));
       const total = size || parseInt(r.headers.get('content-length') || '', 10) || 0;
       const reader = r.body.getReader();
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        await w.write(value); bytes += value.length;
-        onProgress?.({ bytes, total });
+      if (pool) pool.active++;
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          await throttle(value.length, signal);
+          if (pool) pool.received += value.length;
+          await w.write(value); bytes += value.length;
+          onProgress?.({ bytes, total });
+        }
+      } finally {
+        if (pool) pool.active--;
       }
     }
   } catch (e) {

@@ -126,6 +126,12 @@ Vedi le sezioni corrispondenti del [README inglese](README.md#debug). In breve: 
 - **Coda**: girano al massimo *Download contemporanei* download alla volta (impostazioni, predefinito 2); gli altri
   aspettano *in coda* e partono in ordine (anche dopo *riprova* e *riprendi*). Ogni download mostra sotto la sua barra
   una barra sottile per traccia (video, ogni audio, ogni sottotitolo) e una barra generale riassume quelli attivi.
+- **Dettagli dell'avanzamento**: ogni download mostra le connessioni (⇉ attive/massime nel motore del browser; le
+  massime per l'app locale, perché yt-dlp non le comunica), MB scaricati / totale (*≈* finché il totale di uno stream
+  è stimato), velocità e tempo rimanente; la barra generale li somma.
+- **Limite di velocità** (impostazioni, e selettore rapido ⏱ negli elenchi dei download): MB/s per tutti i download
+  insieme. Motore nel browser: vale subito, anche sui download in corso; app locale: `--limit-rate` di yt-dlp,
+  diviso tra i suoi download in corso, per quelli avviati dopo la modifica.
 - **Rinomina durante il download** (✎): il nome serve solo al salvataggio, quindi si può cambiare fino ad allora
   (app locale: fino alla fine dell'unione).
 - Rimuovendo un download in pausa o fallito si cancellano anche i suoi dati temporanei.

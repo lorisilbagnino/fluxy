@@ -2,7 +2,7 @@
 // Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
 // The Fluxy page: download history (persistent), settings (same form as the popup), about.
 
-import { t, UI_LANG, translate, $, send, renderJob, sortJobs, setRerender, restoreEditFocus, renderOverall } from './ui.js';
+import { t, UI_LANG, translate, $, send, renderJob, sortJobs, setRerender, restoreEditFocus, renderOverall, speedLimitControl } from './ui.js';
 import { mountSettings } from './settings.js';
 import { DONATE_URL } from './build-flags.js';
 
@@ -64,6 +64,7 @@ if (DONATE_URL) {
 $('#credits').textContent = t('credits', `v${chrome.runtime.getManifest().version}`);
 $('#credits').title = 'Based on Fluxy by lorisilbagnino — https://github.com/lorisilbagnino/fluxy';
 showTab();
+$('#speed-limit').replaceWith(speedLimitControl());
 await mountSettings($('#settings-body'));
 render((await chrome.storage.local.get('jobs')).jobs);
 chrome.storage.onChanged.addListener((changes, area) => {

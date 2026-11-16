@@ -81,7 +81,8 @@ export function fmtDuration(sec) {
 
 export function fmtSpeed(bps) {
   if (!bps) return '';
-  return bps > 1048576 ? `${(bps / 1048576).toFixed(1)} MB/s` : `${Math.round(bps / 1024)} KB/s`;
+  const f = (n, d) => n.toLocaleString(UI_LANG, { minimumFractionDigits: d, maximumFractionDigits: d });
+  return bps > 1048576 ? `${f(bps / 1048576, 1)} MB/s` : `${f(bps / 1024, 0)} KB/s`;
 }
 
 export function fmtEta(s) {
@@ -104,6 +105,7 @@ export function el(tag, attrs = {}, ...children) {
 }
 
 export function fmtSize(b) {
+  if (!b) return '0 MB';
   const fmt = (n, dg) => n.toLocaleString(UI_LANG, { minimumFractionDigits: dg, maximumFractionDigits: dg });
   return b >= 1073741824 ? `${fmt(b / 1073741824, 2)} GB` : `${fmt(Math.max(0.1, b / 1048576), 1)} MB`;
 }
@@ -197,9 +199,11 @@ function detailRows(j) {
 export function renderJob(j, { full = false } = {}) {
   const pct = Math.round((j.progress || 0) * 100);
   const recording = j.kind === 'record' && j.state === 'running' && !!j.recording;
-  const right = ACTIVE.includes(j.state)
-    ? [fmtSpeed(j.speed), j.eta != null ? `ETA ${fmtEta(j.eta)}` : null, `${pct}%`].filter(Boolean).join(' · ')
-    : j.state === 'paused' ? `${pct}%` : '';
+  const right = ACTIVE.includes(j.state) || j.state === 'paused'
+    ? el('span', { class: 'job-stats' },
+      j.state === 'running' ? connsBadge(j.conns) : null,
+      [sizeOf(j), j.state === 'paused' ? null : fmtSpeed(j.speed), j.state !== 'paused' && j.eta != null ? `ETA ${fmtEta(j.eta)}` : null, `${pct}%`].filter(Boolean).join(' · '))
+    : '';
   const summary = jobSummary(j);
   const info = j.state === 'error'
     ? el('span', { class: 'err', title: j.error || '' }, j.error || t('error'), expiredHint(j) ? el('span', { class: 'hint' }, ` ${t('hint403')}`) : null)
@@ -242,15 +246,52 @@ export function renderOverall(jobs) {
   const n = (s) => list.filter((j) => s.includes(j.state)).length;
   const pct = Math.round(100 * list.reduce((a, j) => a + (j.progress || 0), 0) / list.length);
   const speed = list.reduce((a, j) => a + (['running', 'saving'].includes(j.state) ? j.speed || 0 : 0), 0);
+  const bytes = list.reduce((a, j) => a + (j.bytes || 0), 0);
+  const known = list.every((j) => j.total);
+  const total = list.reduce((a, j) => a + (j.total || 0), 0);
+  const size = bytes || total ? `${fmtSize(bytes)}${known ? ` / ${list.some((j) => j.approx) ? '≈' : ''}${fmtSize(total)}` : ''}` : null;
   return el('div', { class: 'overall', title: t('overallTitle') },
     el('div', { class: 'overall-top' },
       el('span', {}, t('overall', n(['running', 'saving']), n(['queued']), n(['paused']))),
-      el('span', {}, [fmtSpeed(speed), `${pct}%`].filter(Boolean).join(' · '))),
+      el('span', {}, [size, fmtSpeed(speed), `${pct}%`].filter(Boolean).join(' · '))),
     el('div', { class: 'bar' }, el('i', { style: `width:${pct}%` })));
 }
 
 /** Running first, then paused, then the queue in the order it will start, then the history (newest first). */
 const GROUP = { running: 0, saving: 0, paused: 1, queued: 2 };
+/** "123,4 MB / ≈2,10 GB" (≈ while the total of a stream is still an estimate) */
+function sizeOf(j) {
+  if (!j.bytes && !j.total) return null;
+  const done = j.bytes ? fmtSize(j.bytes) : '0 MB';
+  return j.total ? `${done} / ${j.approx ? '≈' : ''}${fmtSize(j.total)}` : done;
+}
+
+/** Connections of a download: active/max in the browser engine, max for the local app (yt-dlp doesn't say). */
+function connsBadge(c) {
+  if (!c?.max) return null;
+  return el('span', { class: 'conns', title: c.active == null ? t('connsMaxTitle', c.max) : t('connsTitle', c.active, c.max) },
+    `⇉ ${c.active == null ? c.max : `${c.active}/${c.max}`}`);
+}
+
+/** Quick speed-limit selector (MB/s, 0 = none) kept in sync with the settings. */
+export function speedLimitControl() {
+  const STEPS = [0, 0.5, 1, 2, 5, 10, 20, 50];
+  const select = el('select', { class: 'speed-limit', title: t('speedLimitTitle'), 'aria-label': t('speedLimitTitle') });
+  const fill = (value) => {
+    const values = [...new Set([...STEPS, value])].sort((a, b) => a - b);
+    select.replaceChildren(...values.map((v) => el('option', { value: String(v), selected: v === value }, v ? `≤ ${String(v).replace('.', ',')} MB/s` : t('noLimit'))));
+  };
+  chrome.storage.local.get('settings').then(({ settings }) => fill(Number(settings?.speedLimit) || 0));
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.settings && document.activeElement !== select) fill(Number(changes.settings.newValue?.speedLimit) || 0);
+  });
+  select.addEventListener('change', async () => {
+    const { settings } = await chrome.storage.local.get('settings');
+    await chrome.storage.local.set({ settings: { ...settings, speedLimit: Number(select.value) || 0 } });
+  });
+  return el('label', { class: 'speed-limit-wrap' }, el('span', {}, '⏱'), select);
+}
+
 export function sortJobs(jobs) {
   return Object.values(jobs || {}).sort((a, b) => ((GROUP[a.state] ?? 3) - (GROUP[b.state] ?? 3))
     || (a.state === 'queued' && b.state === 'queued' ? (a.queuedAt || 0) - (b.queuedAt || 0) : b.startedAt - a.startedAt));

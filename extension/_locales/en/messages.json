@@ -44,6 +44,37 @@
   "maxJobs": {
     "message": "Concurrent downloads"
   },
+  "speedLimit": {
+    "message": "Speed limit (MB/s, 0 = none)"
+  },
+  "speedLimitHelp": {
+    "message": "For all downloads together. In-browser engine: applies at once, also to running downloads; local app: to the downloads started after the change."
+  },
+  "speedLimitTitle": {
+    "message": "Speed limit for all downloads"
+  },
+  "noLimit": {
+    "message": "No limit"
+  },
+  "connsTitle": {
+    "message": "$p1$ of $p2$ connections active",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "connsMaxTitle": {
+    "message": "Up to $p1$ connections (local app)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
   "autoDetect": {
     "message": "Automatic detection on all tabs"
   },

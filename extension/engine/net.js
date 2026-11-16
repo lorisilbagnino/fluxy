@@ -4,24 +4,55 @@
 
 import { m } from './i18n.js';
 
-// One connection budget shared by every track of every job: servers tend to
-// reset connections when a client opens dozens at once.
-let maxConn = 8;
-let slots = 8;
-const queue = [];
+// ---- connections -------------------------------------------------------------------------
+// Each job has its own pool ("connections per download" setting, shown as active/max in the UI);
+// a global cap keeps several jobs together from opening dozens of sockets to the same CDN.
+const GLOBAL_MAX = 32;
 
-export function setMaxConnections(n) {
-  n = Math.max(1, Math.min(32, n | 0 || 8));
-  slots += n - maxConn;
-  maxConn = n;
-  pump();
+export function createPool(max) {
+  // received: bytes read from the network by this pool (live progress, also while a piece is still arriving)
+  return { max: Math.max(1, Math.min(32, max | 0 || 8)), active: 0, queue: [], received: 0 };
 }
 
-function pump() { while (slots > 0 && queue.length) { slots--; queue.shift()(); } }
+const globalPool = createPool(GLOBAL_MAX);
+const sharedPool = createPool(8);   // requests without a job pool (stream analysis in the background)
 
-async function withSlot(fn) {
-  await new Promise((r) => { queue.push(r); pump(); });
-  try { return await fn(); } finally { slots++; pump(); }
+async function acquire(pool) {
+  if (pool.active >= pool.max) await new Promise((r) => pool.queue.push(r));
+  pool.active++;
+}
+
+function release(pool) {
+  pool.active--;
+  pool.queue.shift()?.();
+}
+
+async function withSlot(pool, fn) {
+  await acquire(pool);
+  await acquire(globalPool);
+  try { return await fn(); } finally { release(globalPool); release(pool); }
+}
+
+// ---- speed limit -------------------------------------------------------------------------
+// One token bucket for every download of the engine (bytes per second, 0 = unlimited). It is applied
+// while response bodies are read, so a change takes effect immediately, also on running downloads.
+let rate = 0;
+let tokens = 0;
+let last = 0;
+
+export function setSpeedLimit(bytesPerSecond) {
+  rate = Math.max(0, Number(bytesPerSecond) || 0);
+  tokens = Math.min(tokens, rate);
+  last = performance.now();
+}
+
+async function take(n, signal) {
+  if (!rate) return;
+  const now = performance.now();
+  tokens = Math.min(rate, tokens + ((now - last) / 1000) * rate);   // at most one second of burst
+  last = now;
+  tokens -= n;
+  if (tokens < 0) await sleep((-tokens / rate) * 1000, signal);
 }
 
 export class CancelledError extends Error {
@@ -33,19 +64,45 @@ const sleep = (ms, signal) => new Promise((resolve, reject) => {
   signal?.addEventListener('abort', () => { clearTimeout(t); reject(new CancelledError()); }, { once: true });
 });
 
-/** fetch + read body, retried as a whole (connections may drop mid-body). */
+/** Reads a response body chunk by chunk: speed limit and live byte count (pool.received). */
+export async function readBody(r, signal, pool) {
+  const reader = r.body.getReader();
+  const chunks = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    await take(value.length, signal);
+    if (pool) pool.received += value.length;
+    chunks.push(value);
+    size += value.length;
+  }
+  const out = new Uint8Array(size);
+  let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return out;
+}
+
+/** Throttle for callers that stream a body themselves (direct files without ranges). */
+export const throttle = take;
+
+/**
+ * fetch + read body, retried as a whole (connections may drop mid-body).
+ * opts.pool: the job's connection pool (createPool); the rest goes to fetch().
+ */
 export async function fetchBytes(url, opts = {}, tries = 6) {
+  const { pool = sharedPool, ...init } = opts;
   for (let i = 0; ; i++) {
-    if (opts.signal?.aborted) throw new CancelledError();
+    if (init.signal?.aborted) throw new CancelledError();
     try {
-      return await withSlot(async () => {
-        if (opts.signal?.aborted) throw new CancelledError();
-        const r = await fetch(url, { credentials: 'include', ...opts });
+      return await withSlot(pool, async () => {
+        if (init.signal?.aborted) throw new CancelledError();
+        const r = await fetch(url, { credentials: 'include', ...init });
         if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status}`), { status: r.status });
-        return new Uint8Array(await r.arrayBuffer());
+        return readBody(r, init.signal, pool);
       });
     } catch (e) {
-      if (opts.signal?.aborted || e.name === 'AbortError' || e instanceof CancelledError) throw new CancelledError();
+      if (init.signal?.aborted || e.name === 'AbortError' || e instanceof CancelledError) throw new CancelledError();
       const fatal = e.status && e.status < 500 && e.status !== 429 && e.status !== 408;
       if (fatal || i >= tries) {
         const host = (() => { try { return new URL(url).hostname; } catch { return url; } })();
@@ -53,7 +110,7 @@ export async function fetchBytes(url, opts = {}, tries = 6) {
         throw new Error(m('eng_http', e.message, host) + hint);
       }
       console.warn('[flux] retry', i + 1, url, e.message);
-      await sleep(400 * 2 ** i, opts.signal);
+      await sleep(400 * 2 ** i, init.signal);
     }
   }
 }

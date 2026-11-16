@@ -5,7 +5,7 @@ import { DONATE_URL } from './build-flags.js';
 import { mountSettings } from './settings.js';
 import {
   t, UI_LANG, translate, $, send, el, langLabel, nameIsJustLang, prettyCodec, listFmt, channelsLabel,
-  fmtBitrate, fmtDuration, fmtSize, renderJob, sortJobs, setRerender, restoreEditFocus, renderOverall,
+  fmtBitrate, fmtDuration, fmtSize, renderJob, sortJobs, setRerender, restoreEditFocus, renderOverall, speedLimitControl,
 } from './ui.js';
 
 let tabId = null;
@@ -446,6 +446,7 @@ async function init() {
     if (r?.error) $('#empty').textContent = r.error;
   });
   $('#btn-stop').addEventListener('click', () => send({ type: 'disarm', tabId }));
+  $('#speed-limit').replaceWith(speedLimitControl());
   $('#btn-clear-jobs').addEventListener('click', () => send({ type: 'clearFinished' }));
   $('#btn-manager').addEventListener('click', async () => { await send({ type: 'openPage', page: 'downloads' }); window.close(); });
   // Videos in the page itself (no playback needed): scanned every time the popup opens.

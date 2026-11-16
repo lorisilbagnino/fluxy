@@ -10,6 +10,7 @@ const uiLang = (globalThis.chrome?.i18n?.getUILanguage?.() || 'en').split('-')[0
 export const DEFAULT_SETTINGS = {
   engine: 'browser',          // 'browser' = everything in the extension, 'native' = ffmpeg + yt-dlp via the local app
   outputDir: '~/Downloads',   // native engine only (the browser engine saves to the browser's download folder)
+  speedLimit: 0,              // MB/s for all downloads together, 0 = no limit
   maxJobs: 2,                 // downloads running at the same time; the others wait in the queue
   container: 'mkv', langs: [...new Set([uiLang, 'en'])].join(', '), fragments: 8, autoDetect: false,
 };
