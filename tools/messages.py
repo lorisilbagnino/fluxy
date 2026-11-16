@@ -140,6 +140,8 @@ M = {
     "showFile": ("show file", "mostra file"),
     "openFolder": ("open folder", "apri cartella"),
     "remove": ("remove", "rimuovi"),
+    "skipTrack": ("Skip this track: stop it and leave it out of the file", "Salta questa traccia: interrompila e lasciala fuori dal file"),
+    "skipped": ("skipped", "saltata"),
     "pause": ("pause", "pausa"),
     "resume": ("resume", "riprendi"),
     "retryJob": ("retry", "riprova"),

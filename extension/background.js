@@ -754,6 +754,7 @@ function localEngine() {
     cancel: async (jobId) => (await load()).cancelJob(jobId, bridge),
     pause: async (jobId) => (await load()).pauseJob(jobId),
     setLimit: async (bps) => (await load()).setSpeedLimit(bps),
+    skipTrack: async (jobId, index) => (await load()).skipTrack(jobId, index),
     cleanup: async (jobId) => (await load()).cleanupJob(jobId),
   };
 }
@@ -782,6 +783,7 @@ function offscreenEngine() {
     cancel: (jobId) => send('cancel', { jobId }),
     pause: (jobId) => send('pause', { jobId }),
     setLimit: async (bps) => { if (await chrome.offscreen.hasDocument()) await send('speedLimit', { bytesPerSecond: bps }); },
+    skipTrack: async (jobId, index) => { if (await chrome.offscreen.hasDocument()) await send('skipTrack', { jobId, index }); },
     cleanup: async (jobId) => { if (await chrome.offscreen.hasDocument()) await send('cleanup', { jobId }); },
   };
 }
@@ -1013,18 +1015,19 @@ async function refreshSpec(j) {
   if (spec.video) {
     video = find(d.video, spec.video, [['formatId'], ['height', 'codec', 'bandwidth'], ['height', 'codec'], ['height']].filter((k) => k.every((x) => spec.video[x] != null)));
     if (!video) return spec;
+    if (spec.video.skip) video = { ...video, skip: true };
   }
   const audio = [];
   for (const a of spec.audio || []) {
     const hit = find(d.audio, a, [['formatId'], ['lang', 'name', 'codec', 'channels'], ['lang', 'codec'], ['lang', 'name']].filter((k) => k.every((x) => a[x] != null)));
     if (!hit) return spec;
-    audio.push(hit);
+    audio.push(a.skip ? { ...hit, skip: true } : hit);
   }
   const subs = [];
   for (const x of spec.subs || []) {
     const hit = find(d.subs, x, [['ytLang'], ['lang', 'name', 'forced'], ['lang', 'forced']].filter((k) => k.every((y) => x[y] != null)));
     if (!hit) return spec;
-    subs.push(hit);
+    subs.push(x.skip ? { ...hit, skip: true } : hit);
   }
   return { ...spec, url: fresh.s.url, headers: fresh.s.headers || spec.headers, video, audio, subs };
 }
@@ -1046,6 +1049,29 @@ async function renameJob(jobId, filename) {
   if (j.engine !== 'browser' && ['running', 'paused'].includes(j.state)) {
     try { hostSend({ type: 'rename', jobId, filename: name }); } catch {}
   }
+}
+
+/**
+ * Skip one track of a download (index in video, audio…, subtitles order, as in the per-track progress).
+ * The track is flagged in the job (so a later retry or resume leaves it out too) and the engine stops it.
+ */
+async function skipTrack(jobId, index) {
+  const j = (await getJobs())[jobId];
+  if (!j?.spec || !Number.isInteger(index)) return;
+  const order = (x) => [...(x.video ? [x.video] : []), ...(x.audio || []), ...(x.subs || [])];
+  await mutateJobs((jobs) => {
+    const x = jobs[jobId];
+    if (!x) return;
+    const items = order(x.spec);
+    if (!items[index]) return;
+    items[index].skip = true;
+    const det = order(x.detail || {});
+    if (det[index]) det[index].skip = true;
+    if (x.tracks?.[index]) x.tracks[index].s = true;
+  });
+  if (!['running', 'paused', 'saving'].includes(j.state)) return;
+  if (j.engine === 'browser') await browserEngine.skipTrack(jobId, index);
+  else { try { hostSend({ type: 'skipTrack', jobId, index }); } catch {} }
 }
 
 /** The Fluxy page (app.html#downloads|settings|about): focus it if already open. */
@@ -1094,6 +1120,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
       case 'resume': await resumeJob(msg.jobId); return {};
       case 'retry': await retryJob(msg.jobId); return {};
       case 'renameJob': await renameJob(msg.jobId, msg.filename); return {};
+      case 'skipTrack': await skipTrack(msg.jobId, msg.index); return {};
       case 'openManager': await openPage('downloads'); return {};
       case 'openPage': await openPage(msg.page); return {};
       case 'clearTab': await clearTab(msg.tabId); return {};

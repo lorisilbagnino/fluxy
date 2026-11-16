@@ -202,6 +202,9 @@ If you register the app from the repository with `./host/install.sh` and then mo
 - **Speed limit** (settings, and a quick ⏱ selector in the download lists): MB/s for all downloads together. In-browser
   engine: a shared token bucket applied while data arrives, so changes take effect at once; local app: yt-dlp
   `--limit-rate`, split among its running downloads, for the downloads started after the change.
+- **Tracks in parallel, skip a track**: video, every audio and every subtitle download at the same time (local app:
+  one yt-dlp/ffmpeg process each, the connections split among them). The ✕ on a track's row stops it and leaves it
+  out of the file; the rest goes on, and a later retry or resume skips it too.
 - **Rename while downloading** (✎): the name is used only when the file is saved, so it can change until then
   (local app: until the merge finishes).
 - Removing a paused or failed download deletes its staged data.

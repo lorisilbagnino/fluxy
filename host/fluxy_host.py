@@ -29,7 +29,7 @@ import traceback
 import urllib.parse
 import urllib.request
 
-VERSION = "0.10.0"
+VERSION = "0.11.0"
 CACHE_DIR = os.path.join(os.path.expanduser("~/.cache"), "fluxy")
 LOG_FILE = os.path.join(CACHE_DIR, "host.log")
 UA_FALLBACK = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -107,6 +107,8 @@ TEXT = {
         "Subtitles {lang} ({i}/{n})": "Sottotitoli {lang} ({i}/{n})",
         "Merging into one file": "Unione in un unico file",
         "Paused": "In pausa",
+        "Downloading {n} tracks": "Download di {n} tracce in parallelo",
+        "Nothing left to download: every track was skipped": "Niente da scaricare: tutte le tracce sono state saltate",
         "{label} file not found after the download": "File {label} non trovato dopo il download",
         "{lang} subtitles not downloaded": "Sottotitoli {lang} non scaricati",
         "{lang} subtitles are empty": "Sottotitoli {lang} vuoti",
@@ -585,6 +587,17 @@ def install_hints(env: dict) -> dict:
     return {"cryptodome": crypto, "tools": tools}
 
 
+def track_list(spec: dict) -> list[dict]:
+    """video, audio…, subtitles: the order of the per-track progress and of "skip" indices."""
+    return ([spec["video"]] if spec.get("video") else []) + list(spec.get("audio") or []) + list(spec.get("subs") or [])
+
+
+def track_key(role: str, t: dict) -> str:
+    """Stable name for a track's temp file: survives URL refreshes and skipped neighbours on retry."""
+    ident = "|".join(str(t.get(k) or "") for k in ("height", "lang", "name", "formatId", "codec", "forced", "ytLang"))
+    return role[0] + hashlib.sha1(f"{role}|{ident}".encode()).hexdigest()[:10]
+
+
 SRT_JUNK_RE = re.compile(r"^(WEBVTT\b.*|X-TIMESTAMP-MAP=.*|NOTE\b.*|STYLE)$")
 
 
@@ -608,12 +621,18 @@ class Cancelled(Exception):
     pass
 
 
+class Skipped(Exception):
+    """The user dropped this track while it was downloading."""
+
+
 class Job:
     def __init__(self, job_id: str, spec: dict):
         self.id = job_id
         self.spec = spec
-        self.proc: subprocess.Popen | None = None
+        self.procs: dict = {}            # task -> running Popen (tracks download in parallel)
+        self.skipped: set[int] = {i for i, x in enumerate(track_list(spec)) if x.get("skip")}
         self.cancelled = False
+        self.failing = False              # one task failed: the others are being stopped
         self.tmp = None
         self.last_emit = 0.0
         self.last_stage = None
@@ -633,16 +652,28 @@ class Job:
         send({"type": "job", "jobId": self.id, **fields})
 
     # -- process helpers --------------------------------------------------
-    def run(self, cmd: list[str], on_line=None):
+    def _signal(self, proc, sig):
+        if proc and proc.poll() is None:
+            try:
+                os.killpg(proc.pid, sig)
+            except OSError:
+                pass
+
+    def run(self, cmd: list[str], on_line=None, task="main"):
         self.resumed.wait()          # paused between two steps: don't start the next one
-        if self.cancelled:
+        if self.cancelled or self.failing:
             raise Cancelled()
+        if task in self.skipped:
+            raise Skipped()
         log("run", redact(" ".join(cmd)))
-        self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                     stdin=subprocess.DEVNULL, bufsize=0, start_new_session=True)
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                stdin=subprocess.DEVNULL, bufsize=0, start_new_session=True)
+        self.procs[task] = proc
+        if self.paused:
+            self._signal(proc, signal.SIGSTOP)
         tail = []
         buf = b""
-        fd = self.proc.stdout.fileno()
+        fd = proc.stdout.fileno()
         # Split on \r as well as \n: ffmpeg (also when yt-dlp delegates to it)
         # rewrites its progress line with carriage returns.
         while True:
@@ -661,27 +692,41 @@ class Job:
                         on_line(line)
                     except Exception:  # noqa: BLE001
                         log("on_line error", traceback.format_exc(limit=2))
-        rc = self.proc.wait()
-        self.proc = None
-        if self.cancelled:
+        rc = proc.wait()
+        self.procs.pop(task, None)
+        if task in self.skipped:
+            raise Skipped()
+        if self.cancelled or self.failing:
             raise Cancelled()
         if rc != 0:
             msg = next((l for l in reversed(tail) if "ERROR" in l or "rror" in l), tail[-1] if tail else "")
             log("failed", rc, "\n".join(tail))
             raise RuntimeError(msg.strip() or f"exit code {rc}")
 
+    def _stop(self, proc):
+        if self.paused:
+            self._signal(proc, signal.SIGCONT)   # a stopped process can't handle SIGTERM
+        self._signal(proc, signal.SIGTERM)
+
     def cancel(self):
         self.cancelled = True
-        p = self.proc
-        if p and p.poll() is None:
-            try:
-                if self.paused:
-                    os.killpg(p.pid, signal.SIGCONT)   # a stopped process can't handle SIGTERM
-                os.killpg(p.pid, signal.SIGTERM)
-            except OSError:
-                pass
+        for proc in list(self.procs.values()):
+            self._stop(proc)
         self.paused = False
         self.resumed.set()
+
+    def fail_fast(self):
+        """A track failed: stop the others (finished tracks stay on disk for "retry")."""
+        self.failing = True
+        for proc in list(self.procs.values()):
+            self._stop(proc)
+
+    def skip(self, idx: int):
+        """Drop one track (index in video, audio…, subtitles order): stop it, leave it out of the file."""
+        self.skipped.add(idx)
+        proc = self.procs.get(idx)
+        if proc:
+            self._stop(proc)
 
     # Pause = SIGSTOP on the running tool (yt-dlp / ffmpeg) and its children; nothing is lost.
     def pause(self):
@@ -689,24 +734,16 @@ class Job:
             return
         self.paused = True
         self.resumed.clear()
-        p = self.proc
-        if p and p.poll() is None:
-            try:
-                os.killpg(p.pid, signal.SIGSTOP)
-            except OSError:
-                pass
+        for proc in list(self.procs.values()):
+            self._signal(proc, signal.SIGSTOP)
         self.emit(force=True, state="paused", stage=T("Paused"), speed=None, eta=None)
 
     def resume(self):
         if not self.paused:
             return
         self.paused = False
-        p = self.proc
-        if p and p.poll() is None:
-            try:
-                os.killpg(p.pid, signal.SIGCONT)
-            except OSError:
-                pass
+        for proc in list(self.procs.values()):
+            self._signal(proc, signal.SIGCONT)
         self.resumed.set()
         self.emit(force=True, state="running", stage=self.last_stage)
 
@@ -757,6 +794,7 @@ class Job:
         tt = [int((t.get("bandwidth") or 0) * (duration or 0) / 8) for _, t in tracks]
         tdone = [False] * len(tracks)
         conns = {"v": None}      # shown as "connections" while a track is downloading
+        ts = [0.0] * len(tlabels)  # current speed of each task (they run in parallel)
 
         # Progress weights from bitrate (fallbacks: video 3 Mbps, audio 128 kbps)
         weights = [(t.get("bandwidth") or (3_000_000 if r == "video" else 128_000)) for r, t in tracks]
@@ -765,75 +803,93 @@ class Job:
         total_w = sum(weights) + mux_weight
         done_w = 0.0
 
-        def report(stage, frac_of_current, cur_w, idx=None, **extra):
-            if idx is not None:
-                tf[idx] = max(tf[idx], min(1.0, frac_of_current))
-            known = all(tt) and bool(tt)
-            self.emit(state="running", stage=stage,
-                      progress=min(0.999, (done_w + cur_w * frac_of_current) / total_w),
-                      tracks=[{"k": k, "l": l, "f": round(f, 3)} for (k, l), f in zip(tlabels, tf)],
-                      bytes=sum(tb), total=sum(tt) if known else None, approx=not all(tdone),
-                      conns=conns["v"], **extra)
+        progress_lock = threading.Lock()
 
-        files = []
+        def report(stage, frac_of_current, cur_w, idx=None, speed=None, eta=None, **extra):
+            with progress_lock:
+                if idx is not None:
+                    tf[idx] = max(tf[idx], min(1.0, frac_of_current))
+                    if speed is not None:
+                        ts[idx] = speed or 0.0
+                live = [i for i in range(len(tlabels)) if i not in self.skipped]
+                known = all(tt[i] for i in live if i < len(tracks)) and any(i < len(tracks) for i in live)
+                done_part = sum(weights[i] * tf[i] for i in live)
+                if idx is None and cur_w:          # merge step (weight mux_weight)
+                    done_part += cur_w * min(1.0, frac_of_current)
+                live_w = sum(weights[i] for i in live) + mux_weight
+                total_speed = sum(ts[i] for i in live)
+                total_speed = total_speed if total_speed >= 1024 else None   # nothing measurable yet
+                remaining = sum(max(0, tt[i] - tb[i]) for i in live if i < len(tracks))
+                self.emit(state="running", stage=stage,
+                          progress=min(0.999, done_part / live_w) if live_w else 0,
+                          tracks=[{"k": k, "l": l, "f": round(f, 3), **({"s": True} if i in self.skipped else {})}
+                                  for i, ((k, l), f) in enumerate(zip(tlabels, tf))],
+                          bytes=sum(tb[i] for i in live if i < len(tracks)),
+                          total=sum(tt[i] for i in live if i < len(tracks)) if known else None,
+                          approx=not all(tdone[i] for i in live if i < len(tracks)),
+                          conns=conns["v"], speed=total_speed,
+                          eta=(remaining / total_speed) if total_speed and remaining else eta, **extra)
+
         n = len(tracks)
-        for i, (role, t) in enumerate(tracks):
+        frag_total = int(s.get("fragments") or 8)
+        dl_tasks = [i for i in range(n) if i not in self.skipped]
+        # connections split among the tracks so that they add up to the setting (at least one each)
+        share = {i: max(1, frag_total // max(1, len(dl_tasks)) + (1 if r < frag_total % max(1, len(dl_tasks)) else 0))
+                 for r, i in enumerate(dl_tasks)}
+        rate_each = int(s["speedLimit"] / max(1, len(dl_tasks))) if s.get("speedLimit") else 0
+        files_by = {}       # i -> (role, t, path)
+        subs_by = {}        # j -> (sub, path)
+        errors = []
+
+        def download_track(i, role, t):
             label = "video" if role == "video" else f"audio {t.get('lang') or ''}".strip()
-            stage = T("Download {label} ({i}/{n})", label=label, i=i + 1, n=n)
-            report(stage, 0, weights[i])
-            prefix = os.path.join(self.tmp, f"t{i}")
+            stage = T("Download {label} ({i}/{n})", label=label, i=i + 1, n=n) if n == 1 else T("Downloading {n} tracks", n=len(dl_tasks))
+            prefix = os.path.join(self.tmp, track_key(role, t))
             marker = prefix + ".done"
             found = [f for f in glob.glob(prefix + ".*") if not f.endswith((".json", ".part", ".ytdl", ".done"))]
-            if os.path.exists(marker) and found:
-                files.append((role, t, found[0]))
-                tf[i] = 1.0
+            if os.path.exists(marker) and found:          # finished in an earlier attempt
+                files_by[i] = (role, t, found[0])
                 tb[i] = tt[i] = os.path.getsize(found[0])
                 tdone[i] = True
-                done_w += weights[i]
-                continue
-            for f in glob.glob(prefix + ".*"):      # leftovers of an interrupted attempt
+                report(stage, 1.0, weights[i], idx=i)
+                return
+            for f in glob.glob(prefix + ".*"):            # leftovers of an interrupted attempt
                 os.remove(f)
-
             ff = {"t": None, "bytes": None}
 
-            def on_line(line, w=weights[i], stage=stage, ff=ff, idx=i):
+            def on_line(line):
                 m = FF_TIME_RE.search(line)
                 if m and duration:
                     # yt-dlp delegated the download to ffmpeg (e.g. AES-128 without pycryptodomex)
                     pos = int(m[1]) * 3600 + int(m[2]) * 60 + float(m[3])
-                    sx = FF_SPEED_RE.search(line)
-                    sx = float(sx[1]) if sx else 0
                     sz = FF_SIZE_RE.search(line)
                     speed = None
-                    conns["v"] = {"active": 1, "max": 1}
                     if sz:
                         nbytes = int(sz[1]) * 1024
-                        tb[idx] = nbytes
+                        tb[i] = nbytes
                         now = time.time()
                         if ff["t"] and now > ff["t"]:
                             speed = (nbytes - ff["bytes"]) / (now - ff["t"])
                         ff["t"], ff["bytes"] = now, nbytes
-                    eta = max(0, (duration - pos) / sx) if sx else None
-                    report(stage, min(1, pos / duration), w, idx=idx, speed=speed, eta=eta)
+                    report(stage, min(1, pos / duration), weights[i], idx=i, speed=speed)
                 elif line.startswith("FCPROG "):
-                    p = json.loads(line[7:])
-                    total = p.get("total_bytes") or p.get("total_bytes_estimate")
-                    frac = (p.get("downloaded_bytes") or 0) / total if total else 0
-                    tb[idx] = int(p.get("downloaded_bytes") or 0)
+                    pr = json.loads(line[7:])
+                    total = pr.get("total_bytes") or pr.get("total_bytes_estimate")
+                    frac = (pr.get("downloaded_bytes") or 0) / total if total else 0
+                    tb[i] = int(pr.get("downloaded_bytes") or 0)
                     if total:
-                        tt[idx] = int(total)
-                    if p.get("fragment_count"):
-                        frac = max(frac, (p.get("fragment_index") or 0) / p["fragment_count"])
-                    report(stage, frac, w, idx=idx, speed=p.get("speed"), eta=p.get("eta"))
+                        tt[i] = int(total)
+                    if pr.get("fragment_count"):
+                        frac = max(frac, (pr.get("fragment_index") or 0) / pr["fragment_count"])
+                    report(stage, frac, weights[i], idx=i, speed=pr.get("speed"), eta=pr.get("eta"))
 
             cmd = ["yt-dlp", "--newline", "--no-warnings", "--no-playlist", "--no-mtime",
-                   "--no-part", "--fixup", "never", "-N", str(s.get("fragments") or 8),
+                   "--no-part", "--fixup", "never", "-N", str(share[i]),
                    "--retries", "10", "--fragment-retries", "20",
                    "--progress-template", "download:FCPROG %(progress)j",
                    *ytdlp_header_args(headers), "-o", prefix + ".%(ext)s"]
-            if s.get("speedLimit"):
-                cmd += ["--limit-rate", str(max(1024, int(s["speedLimit"])))]   # bytes/s
-            conns["v"] = {"active": None, "max": int(s.get("fragments") or 8)}
+            if rate_each:
+                cmd += ["--limit-rate", str(max(1024, rate_each))]   # bytes/s
             if t.get("formatId"):
                 info_path = info_cache_path(s["url"])
                 if not os.path.exists(info_path):
@@ -841,30 +897,28 @@ class Job:
                 cmd += ["--load-info-json", info_path, "-f", t["formatId"]]
             else:
                 cmd += [t["url"]]
-            self.run(cmd, on_line)
+            self.run(cmd, on_line, task=i)
             found = [f for f in glob.glob(prefix + ".*") if not f.endswith((".json", ".part", ".ytdl", ".done"))]
             if not found:
                 raise RuntimeError(T("{label} file not found after the download", label=label))
             open(marker, "w").close()
-            files.append((role, t, found[0]))
-            tf[i] = 1.0
+            files_by[i] = (role, t, found[0])
             tb[i] = tt[i] = os.path.getsize(found[0])
             tdone[i] = True
-            done_w += weights[i]
+            ts[i] = 0.0
+            report(stage, 1.0, weights[i], idx=i, speed=0)
 
-        conns["v"] = None
-        sub_files = []
-        for j, sub in enumerate(subs):
+        def download_sub(j, sub):
+            idx = n + j
             stage = T("Subtitles {lang} ({i}/{n})", lang=sub.get("lang") or "", i=j + 1, n=len(subs))
-            report(stage, 0, 20_000)
-            dst = os.path.join(self.tmp, f"s{j}.srt")
+            dst = os.path.join(self.tmp, f"{track_key('sub', sub)}.srt")
             if sub.get("ytLang"):
-                pfx = os.path.join(self.tmp, f"s{j}")
+                pfx = dst[:-4]
                 self.run(["yt-dlp", "--no-warnings", "--skip-download", "--write-subs",
                           "--sub-langs", "^" + re.escape(sub["ytLang"]) + "$", "--convert-subs", "srt",
                           *ytdlp_header_args(headers), "--load-info-json", info_cache_path(s["url"]),
-                          "-o", pfx + ".%(ext)s"])
-                got = glob.glob(pfx + "*.srt")
+                          "-o", pfx + ".%(ext)s"], task=idx)
+                got = [g for g in glob.glob(pfx + ".*.srt")]
                 if not got:
                     raise RuntimeError(T("{lang} subtitles not downloaded", lang=sub.get("lang")))
                 os.replace(got[0], dst)
@@ -873,9 +927,9 @@ class Job:
                     try:
                         self.run(["ffmpeg", "-nostdin", "-v", "error", "-y", *ffmpeg_header_args(headers),
                                   "-extension_picky", "0", "-i", sub["url"], "-map", "0:s:0?",
-                                  "-c:s", "srt", dst])
+                                  "-c:s", "srt", dst], task=idx)
                         break
-                    except Cancelled:
+                    except (Cancelled, Skipped):
                         raise
                     except RuntimeError:
                         if attempt == 2:
@@ -885,9 +939,40 @@ class Job:
                 if not os.path.exists(dst) or os.path.getsize(dst) == 0:
                     raise RuntimeError(T("{lang} subtitles are empty", lang=sub.get("lang")))
                 clean_srt(dst)
-            sub_files.append((sub, dst))
-            tf[len(tracks) + j] = 1.0
-            done_w += 20_000
+            subs_by[j] = (sub, dst)
+            report(stage, 1.0, weights[idx], idx=idx)
+
+        def worker(fn, *args):
+            try:
+                fn(*args)
+            except (Skipped, Cancelled):
+                pass
+            except Exception as e:  # noqa: BLE001
+                if not self.failing and not self.cancelled:
+                    errors.append(e)
+                    self.fail_fast()
+
+        conns["v"] = {"active": None, "max": sum(share.values())} if dl_tasks else None
+        report(T("Downloading {n} tracks", n=len(dl_tasks)) if n != 1 else T("Download {label} ({i}/{n})", label="video" if tracks[0][0] == "video" else "audio", i=1, n=1), 0, 0)
+        threads = [threading.Thread(target=worker, args=(download_track, i, role, t), daemon=True)
+                   for i, (role, t) in enumerate(tracks) if i not in self.skipped]
+        threads += [threading.Thread(target=worker, args=(download_sub, j, sub), daemon=True)
+                    for j, sub in enumerate(subs) if n + j not in self.skipped]
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join()
+        conns["v"] = None
+        if self.cancelled:
+            raise Cancelled()
+        if errors:
+            raise errors[0]
+        # what is left after the skipped tracks, in the original order
+        files = [files_by[i] for i in sorted(files_by) if i not in self.skipped]
+        sub_files = [subs_by[j] for j in sorted(subs_by) if n + j not in self.skipped]
+        if not files and not sub_files:
+            raise RuntimeError(T("Nothing left to download: every track was skipped"))
+        done_w = sum(weights[i] for i in range(len(tlabels)) if i not in self.skipped)
 
         # ---- subtitles only: one .srt per track next to each other -------------
         if not files:
@@ -1009,6 +1094,10 @@ def handle(msg: dict):
         job = JOBS.get(msg.get("jobId"))
         if job and msg.get("filename"):
             job.spec["filename"] = msg["filename"]
+    elif t == "skipTrack":
+        job = JOBS.get(msg.get("jobId"))
+        if job and isinstance(msg.get("index"), int):
+            job.skip(msg["index"])
     elif t in ("pause", "resume"):
         job = JOBS.get(msg.get("jobId"))
         if job:
