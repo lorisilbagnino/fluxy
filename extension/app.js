@@ -2,7 +2,7 @@
 // Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
 // The Fluxy page: download history (persistent), settings (same form as the popup), about.
 
-import { t, UI_LANG, translate, $, send, renderJob, sortJobs, setRerender, restoreEditFocus } from './ui.js';
+import { t, UI_LANG, translate, $, send, renderJob, sortJobs, setRerender, restoreEditFocus, renderOverall } from './ui.js';
 import { mountSettings } from './settings.js';
 import { DONATE_URL } from './build-flags.js';
 
@@ -27,9 +27,11 @@ function render(jobs) {
   lastJobs = jobs || {};
   const list = sortJobs(jobs);
   $('#empty').hidden = list.length > 0;
-  const active = list.filter((j) => ['running', 'saving'].includes(j.state)).length;
+  const active = list.filter((j) => ['running', 'saving', 'queued', 'paused'].includes(j.state)).length;
   $('#counts').textContent = list.length ? t('managerCounts', active, list.length) : '';
   $('#btn-clear').hidden = !list.some((j) => ['done', 'error', 'cancelled'].includes(j.state));
+  const overall = renderOverall(jobs);
+  $('#overall').replaceChildren(...(overall ? [overall] : []));
   $('#list').replaceChildren(...list.map((j) => renderJob(j, { full: true })));
   restoreEditFocus($('#list'));
 }

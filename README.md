@@ -193,6 +193,9 @@ If you register the app from the repository with `./host/install.sh` and then mo
 - **Persistent history**: downloads are kept across browser restarts; one left running when the browser closed is
   marked *interrupted* and can be retried. *Clear history* (asks twice) or *remove* a single entry; saved files are
   never touched. The history keeps the latest 300 finished downloads.
+- **Queue**: at most *Concurrent downloads* (settings, default 2) run at once; the others wait as *queued* and
+  start in order (also after *retry* and *resume*). Each download shows one thin bar per track (video, each audio,
+  each subtitle) under its own bar, and an overall bar sums up the active downloads.
 - **Rename while downloading** (✎): the name is used only when the file is saved, so it can change until then
   (local app: until the merge finishes).
 - Removing a paused or failed download deletes its staged data.

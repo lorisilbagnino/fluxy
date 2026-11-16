@@ -29,7 +29,7 @@ import traceback
 import urllib.parse
 import urllib.request
 
-VERSION = "0.8.0"
+VERSION = "0.9.0"
 CACHE_DIR = os.path.join(os.path.expanduser("~/.cache"), "fluxy")
 LOG_FILE = os.path.join(CACHE_DIR, "host.log")
 UA_FALLBACK = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -748,6 +748,10 @@ class Job:
         for a in s.get("audio") or []:
             tracks.append(("audio", a))
         subs = s.get("subs") or []
+        # per-track progress shown under the job's bar: [{k: video|audio|sub, l: label, f: 0..1}]
+        tlabels = [(r, (f"{t['height']}p" if r == "video" and t.get("height") else (t.get("lang") or ""))) for r, t in tracks]
+        tlabels += [("sub", (x.get("lang") or "") + (" forced" if x.get("forced") else "")) for x in subs]
+        tf = [0.0] * len(tlabels)
 
         # Progress weights from bitrate (fallbacks: video 3 Mbps, audio 128 kbps)
         weights = [(t.get("bandwidth") or (3_000_000 if r == "video" else 128_000)) for r, t in tracks]
@@ -756,9 +760,12 @@ class Job:
         total_w = sum(weights) + mux_weight
         done_w = 0.0
 
-        def report(stage, frac_of_current, cur_w, **extra):
+        def report(stage, frac_of_current, cur_w, idx=None, **extra):
+            if idx is not None:
+                tf[idx] = max(tf[idx], min(1.0, frac_of_current))
             self.emit(state="running", stage=stage,
-                      progress=min(0.999, (done_w + cur_w * frac_of_current) / total_w), **extra)
+                      progress=min(0.999, (done_w + cur_w * frac_of_current) / total_w),
+                      tracks=[{"k": k, "l": l, "f": round(f, 3)} for (k, l), f in zip(tlabels, tf)], **extra)
 
         files = []
         n = len(tracks)
@@ -771,6 +778,7 @@ class Job:
             found = [f for f in glob.glob(prefix + ".*") if not f.endswith((".json", ".part", ".ytdl", ".done"))]
             if os.path.exists(marker) and found:
                 files.append((role, t, found[0]))
+                tf[i] = 1.0
                 done_w += weights[i]
                 continue
             for f in glob.glob(prefix + ".*"):      # leftovers of an interrupted attempt
@@ -778,7 +786,7 @@ class Job:
 
             ff = {"t": None, "bytes": None}
 
-            def on_line(line, w=weights[i], stage=stage, ff=ff):
+            def on_line(line, w=weights[i], stage=stage, ff=ff, idx=i):
                 m = FF_TIME_RE.search(line)
                 if m and duration:
                     # yt-dlp delegated the download to ffmpeg (e.g. AES-128 without pycryptodomex)
@@ -794,14 +802,14 @@ class Job:
                             speed = (nbytes - ff["bytes"]) / (now - ff["t"])
                         ff["t"], ff["bytes"] = now, nbytes
                     eta = max(0, (duration - pos) / sx) if sx else None
-                    report(stage, min(1, pos / duration), w, speed=speed, eta=eta)
+                    report(stage, min(1, pos / duration), w, idx=idx, speed=speed, eta=eta)
                 elif line.startswith("FCPROG "):
                     p = json.loads(line[7:])
                     total = p.get("total_bytes") or p.get("total_bytes_estimate")
                     frac = (p.get("downloaded_bytes") or 0) / total if total else 0
                     if p.get("fragment_count"):
                         frac = max(frac, (p.get("fragment_index") or 0) / p["fragment_count"])
-                    report(stage, frac, w, speed=p.get("speed"), eta=p.get("eta"))
+                    report(stage, frac, w, idx=idx, speed=p.get("speed"), eta=p.get("eta"))
 
             cmd = ["yt-dlp", "--newline", "--no-warnings", "--no-playlist", "--no-mtime",
                    "--no-part", "--fixup", "never", "-N", str(s.get("fragments") or 8),
@@ -821,6 +829,7 @@ class Job:
                 raise RuntimeError(T("{label} file not found after the download", label=label))
             open(marker, "w").close()
             files.append((role, t, found[0]))
+            tf[i] = 1.0
             done_w += weights[i]
 
         sub_files = []
@@ -856,6 +865,7 @@ class Job:
                     raise RuntimeError(T("{lang} subtitles are empty", lang=sub.get("lang")))
                 clean_srt(dst)
             sub_files.append((sub, dst))
+            tf[len(tracks) + j] = 1.0
             done_w += 20_000
 
         # ---- subtitles only: one .srt per track next to each other -------------

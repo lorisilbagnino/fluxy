@@ -5,7 +5,7 @@ import { DONATE_URL } from './build-flags.js';
 import { mountSettings } from './settings.js';
 import {
   t, UI_LANG, translate, $, send, el, langLabel, nameIsJustLang, prettyCodec, listFmt, channelsLabel,
-  fmtBitrate, fmtDuration, fmtSize, renderJob, sortJobs, setRerender, restoreEditFocus,
+  fmtBitrate, fmtDuration, fmtSize, renderJob, sortJobs, setRerender, restoreEditFocus, renderOverall,
 } from './ui.js';
 
 let tabId = null;
@@ -384,6 +384,8 @@ function renderJobs(jobs) {
   const shown = list.filter((j, i) => !['done', 'cancelled'].includes(j.state) || i < 3).slice(0, 8);
   $('#btn-manager').hidden = shown.length === list.length;
   $('#btn-manager').textContent = t('showAll', list.length);
+  const overall = renderOverall(jobs);
+  $('#jobs-overall').replaceChildren(...(overall && list.length > 1 ? [overall] : []));
   $('#jobs').replaceChildren(...shown.map((j) => renderJob(j)));
   restoreEditFocus($('#jobs'));
 }

@@ -123,6 +123,9 @@ Vedi le sezioni corrispondenti del [README inglese](README.md#debug). In breve: 
 - **Cronologia persistente**: i download restano anche dopo il riavvio del browser; quelli rimasti a metà diventano
   *interrotti* e si possono riprovare. *Cancella cronologia* (chiede conferma) o *rimuovi* il singolo download; i file
   salvati non vengono mai toccati. La cronologia conserva gli ultimi 300 download conclusi.
+- **Coda**: girano al massimo *Download contemporanei* download alla volta (impostazioni, predefinito 2); gli altri
+  aspettano *in coda* e partono in ordine (anche dopo *riprova* e *riprendi*). Ogni download mostra sotto la sua barra
+  una barra sottile per traccia (video, ogni audio, ogni sottotitolo) e una barra generale riassume quelli attivi.
 - **Rinomina durante il download** (✎): il nome serve solo al salvataggio, quindi si può cambiare fino ad allora
   (app locale: fino alla fine dell'unione).
 - Rimuovendo un download in pausa o fallito si cancellano anche i suoi dati temporanei.

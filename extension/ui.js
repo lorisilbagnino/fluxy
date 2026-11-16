@@ -115,7 +115,7 @@ export function fmtSize(b) {
 const edits = new Map();   // jobId -> {value, caret}
 let rerender = () => {};
 export function setRerender(fn) { rerender = fn; }
-const RENAMABLE = ['running', 'paused', 'error', 'cancelled'];
+const RENAMABLE = ['queued', 'running', 'paused', 'error', 'cancelled'];
 
 export function restoreEditFocus(root) {
   const input = root.querySelector('input[data-edit]');
@@ -170,9 +170,9 @@ function jobButtons(j, full) {
   if (j.state === 'running') out.push(b(t('pause'), { type: 'pause' }));
   if (j.state === 'paused') out.push(b(t('resume'), { type: 'resume' }, 'accent'));
   if (j.state === 'error' || (j.state === 'cancelled' && j.spec)) out.push(b(t('retryJob'), { type: 'retry' }, 'accent'));
-  if ([...ACTIVE, 'paused'].includes(j.state)) out.push(b(t('cancel'), { type: 'cancel' }));
+  if ([...ACTIVE, 'paused', 'queued'].includes(j.state)) out.push(b(t('cancel'), { type: 'cancel' }));
   if (j.state === 'done') out.push(b(j.engine === 'browser' ? t('showFile') : t('openFolder'), { type: 'reveal' }));
-  if (![...ACTIVE, 'paused'].includes(j.state)) out.push(b(t('remove'), { type: 'removeJob' }));
+  if (![...ACTIVE, 'paused', 'queued'].includes(j.state)) out.push(b(t('remove'), { type: 'removeJob' }));
   return out;
 }
 
@@ -215,12 +215,43 @@ export function renderJob(j, { full = false } = {}) {
         ...jobButtons(j, full)),
     full && summary ? el('div', { class: 'job-summary' }, summary) : null,
     el('div', { class: 'bar' }, el('i', { style: `width:${j.state === 'done' ? 100 : pct}%` })),
+    trackBars(j),
     el('div', { class: 'job-info' }, el('span', {}, info), el('span', {}, right)),
     j.note ? el('div', { class: 'muted job-note' }, j.note) : null,
     full ? el('dl', { class: 'job-detail' }, ...detailRows(j).flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)])) : null,
   );
 }
 
+/** One thin bar per track (video, each audio, each subtitle) under the job's bar, while it isn't finished. */
+function trackBars(j) {
+  if (!['running', 'paused', 'queued'].includes(j.state) || !(j.tracks?.length > 1)) return null;
+  const kind = { video: t('video'), audio: t('audio'), sub: t('subtitles') };
+  return el('div', { class: 'tracks' }, ...j.tracks.map((x) => {
+    const pct = Math.round((x.f || 0) * 100);
+    return el('div', { class: `track${pct >= 100 ? ' done' : ''}` },
+      el('span', { class: 'track-name' }, `${kind[x.k] || x.k} ${x.k === 'video' ? x.l || '' : (x.l || '').toUpperCase().replace(' FORCED', ` (${t('forced')})`)}`.trim()),
+      el('span', { class: 'track-bar' }, el('i', { style: `width:${pct}%` })),
+      el('span', { class: 'track-pct' }, `${pct}%`));
+  }));
+}
+
+/** Overall bar of the active downloads (running, queued, paused), or null when there are none. */
+export function renderOverall(jobs) {
+  const list = Object.values(jobs || {}).filter((j) => ['running', 'saving', 'queued', 'paused'].includes(j.state));
+  if (!list.length) return null;
+  const n = (s) => list.filter((j) => s.includes(j.state)).length;
+  const pct = Math.round(100 * list.reduce((a, j) => a + (j.progress || 0), 0) / list.length);
+  const speed = list.reduce((a, j) => a + (['running', 'saving'].includes(j.state) ? j.speed || 0 : 0), 0);
+  return el('div', { class: 'overall', title: t('overallTitle') },
+    el('div', { class: 'overall-top' },
+      el('span', {}, t('overall', n(['running', 'saving']), n(['queued']), n(['paused']))),
+      el('span', {}, [fmtSpeed(speed), `${pct}%`].filter(Boolean).join(' · '))),
+    el('div', { class: 'bar' }, el('i', { style: `width:${pct}%` })));
+}
+
+/** Running first, then paused, then the queue in the order it will start, then the history (newest first). */
+const GROUP = { running: 0, saving: 0, paused: 1, queued: 2 };
 export function sortJobs(jobs) {
-  return Object.values(jobs || {}).sort((a, b) => b.startedAt - a.startedAt);
+  return Object.values(jobs || {}).sort((a, b) => ((GROUP[a.state] ?? 3) - (GROUP[b.state] ?? 3))
+    || (a.state === 'queued' && b.state === 'queued' ? (a.queuedAt || 0) - (b.queuedAt || 0) : b.startedAt - a.startedAt));
 }

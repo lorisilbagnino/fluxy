@@ -173,6 +173,12 @@ async function run(jobId, spec, job, emit, bridge) {
   if (spec.video) wanted.push({ type: 'video', ...spec.video });
   for (const a of spec.audio || []) wanted.push({ type: 'audio', ...a });
 
+  // per-track progress shown under the job's bar (subtitles are fetched while merging)
+  const trackView = (subsDone = false) => [
+    ...wanted.map((w, i) => ({ k: w.type, l: w.type === 'video' ? (w.height ? `${w.height}p` : '') : (w.lang || ''), f: +(state[i].total ? state[i].done / state[i].total : 0).toFixed(3) })),
+    ...(spec.subs || []).map((x) => ({ k: 'sub', l: (x.lang || '') + (x.forced ? ' forced' : ''), f: subsDone ? 1 : 0 })),
+  ];
+
   // ---- download (90% of the bar) -----------------------------------------
   const state = wanted.map((w) => ({ bytes: 0, done: 0, total: 0, guess: (w.bandwidth || (w.type === 'video' ? 3e6 : 128e3)) * (spec.duration || 600) / 8 }));
   let lastEmit = 0, lastBytes = 0, lastT = performance.now(), speed = null;
@@ -191,6 +197,7 @@ async function run(jobId, spec, job, emit, bridge) {
     emit({
       state: 'running', progress: 0.9 * frac, stage: wanted.length === 1 ? m('eng_stageDownload1') : m('eng_stageDownloadN', wanted.length),
       speed, eta: speed > 0 ? Math.max(0, (expected - bytes) / speed) : null,
+      tracks: trackView(),
     });
   };
   report(true);
@@ -216,7 +223,7 @@ async function run(jobId, spec, job, emit, bridge) {
   emit({ state: 'running', progress: 0.9, stage, speed: null, eta: null });
   const file = await mux({
     tracks, subs, container, outHandle: out, duration, fetchOpts, ensureHosts,
-    onStage: (s) => { stage = s; emit({ state: 'running', stage: s }); },
+    onStage: (s) => { stage = s; emit({ state: 'running', stage: s, tracks: trackView(s !== m('eng_stageSubs')) }); },
     onProgress: (f) => emit({ state: 'running', progress: 0.9 + 0.09 * f, stage }),
   });
 

@@ -137,12 +137,15 @@ const ready = (async () => {
   for (const id of stored || []) armed.add(id);
   loaded = true;
   await markInterrupted();
+  pumpQueue();   // downloads still queued from the previous session
   // Firefox: a new event page means the previous one (and its downloads) is gone.
   if (IS_FIREFOX) failRunningJobs(tx('errSuspended'), 'browser');
   refreshListening();
 })();
 
 chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.settings
+    && changes.settings.newValue?.maxJobs !== changes.settings.oldValue?.maxJobs) pumpQueue();
   if (area === 'local' && changes.settings) {
     autoDetect = { ...DEFAULT_SETTINGS, ...changes.settings.newValue }.autoDetect;
     refreshListening();
@@ -160,7 +163,7 @@ async function markInterrupted() {
   await chrome.storage.session.set({ sessionStarted: Date.now() });
   await mutateJobs((jobs) => {
     for (const j of Object.values(jobs)) {
-      if (['running', 'saving', 'paused'].includes(j.state)) {
+      if (['running', 'saving', 'paused'].includes(j.state) || (j.state === 'queued' && j.resumeNative)) {
         Object.assign(j, { state: 'error', stage: tx('stageError'), error: tx('errInterrupted'), speed: null, eta: null, finishedAt: Date.now() });
       }
     }
@@ -439,11 +442,58 @@ function updateJob(jobId, msg) {
   return mutateJobs((jobs) => {
     const j = jobs[jobId];
     if (!j) return;
-    for (const k of ['state', 'progress', 'stage', 'speed', 'eta', 'output', 'error']) {
+    for (const k of ['state', 'progress', 'stage', 'speed', 'eta', 'output', 'error', 'tracks']) {
       if (msg[k] !== undefined) j[k] = msg[k];
     }
     if (msg.state && msg.state !== 'running' && msg.state !== 'saving') j.finishedAt = Date.now();
+  }).then(() => {
+    // a slot was freed: start the next queued download
+    if (msg.state && !['running', 'saving'].includes(msg.state)) pumpQueue();
   });
+}
+
+// ---------------------------------------------------------------- queue ---
+// Every start (new download, retry, resume) goes through the queue: at most settings.maxJobs downloads run
+// at the same time, the others wait as "queued" and start in order as soon as a slot frees up.
+let pumping = Promise.resolve();
+function pumpQueue() {
+  pumping = pumping.then(async () => {
+    const settings = await getSettings();
+    const limit = Math.max(1, Math.min(10, Number(settings.maxJobs) || DEFAULT_SETTINGS.maxJobs));
+    let jobs = await getJobs();
+    const waiting = Object.values(jobs).filter((j) => j.state === 'queued').sort((a, b) => (a.queuedAt || 0) - (b.queuedAt || 0));
+    if (!waiting.length) return;
+    // a fresh offscreen document fails "running" browser jobs: create it before marking any as running
+    if (waiting.some((j) => j.engine === 'browser' && !j.resumeNative)) await browserEngine.prepare();
+    const launch = [];
+    await mutateJobs((all) => {
+      let running = Object.values(all).filter((j) => ['running', 'saving'].includes(j.state)).length;
+      for (const w of waiting) {
+        const j = all[w.id];
+        if (running >= limit || !j || j.state !== 'queued') continue;
+        Object.assign(j, { state: 'running', stage: tx('stageQueued'), speed: null, eta: null });
+        launch.push({ ...j });
+        running++;
+      }
+    });
+    for (const j of launch) {
+      if (j.resumeNative) { await updateJobRaw(j.id, { resumeNative: undefined }); hostSend({ type: 'resume', jobId: j.id }); }
+      else if (j.engine === 'browser') await browserEngine.start(j.id, { ...j.spec, strings: engineStrings() });
+      else hostSend({ type: 'download', jobId: j.id, spec: j.spec });
+      if (j.engine === 'browser') keepAlive();
+    }
+  }).catch((e) => console.error('[flux] queue', e));
+  return pumping;
+}
+
+const updateJobRaw = (jobId, fields) => mutateJobs((jobs) => { if (jobs[jobId]) Object.assign(jobs[jobId], fields); });
+
+async function enqueue(jobId, fields = {}) {
+  await mutateJobs((jobs) => {
+    const j = jobs[jobId];
+    if (j) Object.assign(j, { state: 'queued', stage: tx('stageWaiting'), speed: null, eta: null, queuedAt: Date.now(), finishedAt: undefined, ...fields });
+  });
+  return pumpQueue();
 }
 
 function failRunningJobs(err, engine = 'native') {
@@ -499,8 +549,6 @@ async function startDownload({ tabId, streamId, videoId, audioIds, subIds, conta
 
   // Only HLS has an in-browser engine: DASH and yt-dlp pages need the native host (their analysis already did).
   const engine = d.kind === 'hls' ? settings.engine : 'native';
-  // Start the engine first: a fresh offscreen document fails jobs left by a previous one.
-  if (engine === 'browser') await browserEngine.prepare();
   const jobId = crypto.randomUUID().slice(0, 12);
   const spec = {
     url: s.url, headers: s.headers, container: container || settings.container,
@@ -513,15 +561,11 @@ async function startDownload({ tabId, streamId, videoId, audioIds, subIds, conta
     jobs[jobId] = {
       id: jobId, engine, filename: spec.filename, container: spec.container, describe: describeSel(video, audio, subs),
       detail: jobDetail(s, d, video, audio, subs), spec: storedSpec(spec),
-      state: 'running', progress: 0, stage: tx('stageQueued'), startedAt: Date.now(),
+      state: 'queued', progress: 0, stage: tx('stageWaiting'), startedAt: Date.now(), queuedAt: Date.now(),
       headers: engine === 'browser' ? s.headers : undefined,
     };
   });
-  if (engine === 'browser') {
-    await browserEngine.start(jobId, spec);
-  } else {
-    hostSend({ type: 'download', jobId, spec });
-  }
+  await pumpQueue();
   return jobId;
 }
 
@@ -633,7 +677,6 @@ async function analyseFile(stream) {
 /** Only subtitles: .srt files (HLS in the browser; DASH / yt-dlp pages through the local app). */
 async function startSubsDownload(s, d, subs, filename, settings) {
   const engine = d.kind === 'hls' ? 'browser' : 'native';
-  if (engine === 'browser') await browserEngine.prepare();
   const jobId = crypto.randomUUID().slice(0, 12);
   const name = filename || s.title;
   const spec = {
@@ -645,12 +688,11 @@ async function startSubsDownload(s, d, subs, filename, settings) {
     jobs[jobId] = {
       detail: jobDetail(s, d, null, [], subs), spec: storedSpec(spec),
       id: jobId, engine, filename: name, container: 'srt', describe: subs.map((x) => x.lang || '?').join(' · '),
-      state: 'running', progress: 0, stage: tx('stageQueued'), startedAt: Date.now(),
+      state: 'queued', progress: 0, stage: tx('stageWaiting'), startedAt: Date.now(), queuedAt: Date.now(),
       headers: engine === 'browser' ? s.headers : undefined,
     };
   });
-  if (engine === 'browser') await browserEngine.start(jobId, spec);
-  else hostSend({ type: 'download', jobId, spec });
+  await pumpQueue();
   return jobId;
 }
 
@@ -659,7 +701,6 @@ async function startFileDownload(s, d, sourceId, filename) {
   const src = d.video.find((x) => x.id === sourceId) || d.video[0];
   if (!src) throw new Error(tx('errPickOne'));
   const settings = await getSettings();
-  await browserEngine.prepare();
   const jobId = crypto.randomUUID().slice(0, 12);
   const name = filename || s.title;
   const spec = {
@@ -671,10 +712,10 @@ async function startFileDownload(s, d, sourceId, filename) {
       detail: jobDetail(s, d, src, [], []), spec: storedSpec(spec),
       id: jobId, engine: 'browser', filename: name, container: src.ext,
       describe: [src.height ? `${src.height}p` : src.label || null, src.size ? fmtBytes(src.size) : null].filter(Boolean).join(' · '),
-      state: 'running', progress: 0, stage: tx('stageQueued'), startedAt: Date.now(), headers: s.headers,
+      state: 'queued', progress: 0, stage: tx('stageWaiting'), startedAt: Date.now(), queuedAt: Date.now(), headers: s.headers,
     };
   });
-  await browserEngine.start(jobId, spec);
+  await pumpQueue();
   return jobId;
 }
 
@@ -881,6 +922,12 @@ async function downloadInstaller() {
 async function cancelJob(jobId) {
   const j = (await getJobs())[jobId];
   if (!j) return;
+  if (j.state === 'queued') {
+    if (j.resumeNative) { try { hostSend({ type: 'cancel', jobId }); } catch {} }
+    else if (j.engine === 'browser') browserEngine.cleanup(jobId).catch(() => {});   // data kept by a pause / error
+    await updateJob(jobId, { state: 'cancelled', stage: tx('stageCancelled') });
+    return;
+  }
   if (j.engine === 'browser') {
     if (j.state === 'saving') {
       for (const id of j.downloadIds || []) await chrome.downloads.cancel(id).catch(() => {});
@@ -912,11 +959,8 @@ async function pauseJob(jobId) {
 async function resumeJob(jobId) {
   const j = (await getJobs())[jobId];
   if (j?.state !== 'paused') return;
-  await updateJob(jobId, { state: 'running', stage: tx('stageQueued') });
-  if (j.engine === 'browser') {
-    await browserEngine.prepare();
-    await browserEngine.start(jobId, { ...j.spec, strings: engineStrings() });
-  } else hostSend({ type: 'resume', jobId });
+  // local app: the process is only suspended, "resume" wakes it up when its turn comes
+  await enqueue(jobId, j.engine === 'browser' ? {} : { resumeNative: true });
 }
 
 /**
@@ -928,14 +972,7 @@ async function retryJob(jobId) {
   const j = (await getJobs())[jobId];
   if (!j?.spec || !['error', 'cancelled'].includes(j.state)) return;
   const spec = await refreshSpec(j).catch(() => j.spec);
-  await mutateJobs((jobs) => {
-    const x = jobs[jobId];
-    if (x) Object.assign(x, { state: 'running', stage: tx('stageQueued'), error: undefined, finishedAt: undefined, retries: (x.retries || 0) + 1, spec, headers: x.engine === 'browser' ? spec.headers : undefined });
-  });
-  if (j.engine === 'browser') {
-    await browserEngine.prepare();
-    await browserEngine.start(jobId, { ...spec, strings: engineStrings() });
-  } else hostSend({ type: 'download', jobId, spec });
+  await enqueue(jobId, { error: undefined, retries: (j.retries || 0) + 1, spec, headers: j.engine === 'browser' ? spec.headers : undefined });
 }
 
 async function refreshSpec(j) {

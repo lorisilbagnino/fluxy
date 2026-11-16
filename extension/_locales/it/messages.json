@@ -39,7 +39,10 @@
     "message": "Formato predefinito"
   },
   "parallel": {
-    "message": "Connessioni in parallelo"
+    "message": "Connessioni per download"
+  },
+  "maxJobs": {
+    "message": "Download contemporanei"
   },
   "autoDetect": {
     "message": "Rilevamento automatico su tutte le schede"
@@ -393,6 +396,23 @@
       }
     }
   },
+  "overall": {
+    "message": "$p1$ in corso · $p2$ in coda · $p3$ in pausa",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      },
+      "p3": {
+        "content": "$3"
+      }
+    }
+  },
+  "overallTitle": {
+    "message": "Tutti i download attivi"
+  },
   "noDownloads": {
     "message": "Nessun download."
   },
@@ -450,6 +470,9 @@
     "message": "Analizza con yt-dlp"
   },
   "stageQueued": {
+    "message": "Avvio"
+  },
+  "stageWaiting": {
     "message": "In coda"
   },
   "stageDone": {

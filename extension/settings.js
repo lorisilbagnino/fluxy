@@ -30,9 +30,12 @@ const HTML = `
       <input data-s="dir" type="text" spellcheck="false">
     </label>
   </div>
-  <div class="row">
+  <div class="row three">
     <label><span data-i18n="defaultFormat"></span>
       <select data-s="container"><option value="mkv">MKV</option><option value="mp4">MP4</option></select>
+    </label>
+    <label><span data-i18n="maxJobs"></span>
+      <input data-s="maxJobs" type="number" min="1" max="10">
     </label>
     <label><span data-i18n="parallel"></span>
       <input data-s="fragments" type="number" min="1" max="32">
@@ -66,6 +69,7 @@ export async function mountSettings(root, { onChange } = {}) {
     set('dir', 'value', settings.outputDir);
     set('container', 'value', settings.container);
     set('fragments', 'value', settings.fragments);
+    set('maxJobs', 'value', settings.maxJobs);
     set('langs', 'value', settings.langs);
     set('auto', 'checked', !!settings.autoDetect);
     q('dir-field').hidden = settings.engine !== 'native';
@@ -78,6 +82,7 @@ export async function mountSettings(root, { onChange } = {}) {
       outputDir: q('dir').value.trim() || DEFAULT_SETTINGS.outputDir,
       container: q('container').value,
       fragments: Math.min(32, Math.max(1, parseInt(q('fragments').value, 10) || 8)),
+      maxJobs: Math.min(10, Math.max(1, parseInt(q('maxJobs').value, 10) || DEFAULT_SETTINGS.maxJobs)),
       langs: q('langs').value,
       autoDetect: q('auto').checked,
       ...partial,
@@ -125,7 +130,7 @@ export async function mountSettings(root, { onChange } = {}) {
   fill();
   renderNative();
   for (const r of radios) r.addEventListener('change', () => save());
-  for (const k of ['dir', 'container', 'fragments', 'langs', 'auto']) q(k).addEventListener('change', () => save());
+  for (const k of ['dir', 'container', 'maxJobs', 'fragments', 'langs', 'auto']) q(k).addEventListener('change', () => save());
   q('install').addEventListener('click', install);
   q('verify').addEventListener('click', () => send({ type: 'hostCheck' }));
   chrome.storage.onChanged.addListener((changes, area) => {

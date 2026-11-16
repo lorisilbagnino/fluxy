@@ -26,3 +26,5 @@ input[type=text], input[type=number], select {
 }
 .panel label.choice small, .panel label.check small { display: block; }
 .panel-body { display: grid; gap: 10px; }
+.row.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.row.three label > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

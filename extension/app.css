@@ -78,3 +78,17 @@ button { font: inherit; cursor: pointer; }
 .donate img { width: 20px; height: auto; display: block; }
 
 .job-name-edit { flex: 1; min-width: 200px; display: flex; gap: 6px; align-items: center; }
+
+.tracks { display: grid; gap: 3px; }
+.track { display: grid; grid-template-columns: minmax(0, 9em) 1fr 3.2em; gap: 8px; align-items: center; font-size: 11px; color: var(--muted); }
+.track-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track-bar { height: 3px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.track-bar > i { display: block; height: 100%; background: color-mix(in srgb, var(--accent) 70%, var(--muted)); width: 0; transition: width .3s; }
+.track.done .track-bar > i { background: var(--ok); }
+.track-pct { text-align: right; }
+.overall { display: grid; gap: 5px; padding: 8px 12px; margin-bottom: 8px; border-radius: var(--radius); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); }
+.overall-top { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
+.job.queued .bar > i { background: var(--muted); }
+.track { font-size: 12px; grid-template-columns: minmax(0, 11em) 1fr 3.5em; }
+.overall { margin-bottom: 14px; padding: 10px 14px; }
+.overall-top { font-size: 13px; }

@@ -39,7 +39,10 @@
     "message": "Default format"
   },
   "parallel": {
-    "message": "Parallel connections"
+    "message": "Connections per download"
+  },
+  "maxJobs": {
+    "message": "Concurrent downloads"
   },
   "autoDetect": {
     "message": "Automatic detection on all tabs"
@@ -393,6 +396,23 @@
       }
     }
   },
+  "overall": {
+    "message": "$p1$ running · $p2$ queued · $p3$ paused",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      },
+      "p3": {
+        "content": "$3"
+      }
+    }
+  },
+  "overallTitle": {
+    "message": "All active downloads"
+  },
   "noDownloads": {
     "message": "No downloads yet."
   },
@@ -450,6 +470,9 @@
     "message": "Analyse with yt-dlp"
   },
   "stageQueued": {
+    "message": "Starting"
+  },
+  "stageWaiting": {
     "message": "Queued"
   },
   "stageDone": {
