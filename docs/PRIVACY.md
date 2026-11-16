@@ -1,6 +1,6 @@
 # Fluxy – Informativa sulla privacy
 
-*Ultimo aggiornamento: 15 novembre 2026*
+*Ultimo aggiornamento: 16 novembre 2026*
 
 **In breve: Fluxy non raccoglie, non conserva e non invia a nessuno dati personali o sulla tua navigazione.**
 
@@ -16,10 +16,13 @@
   Authorization), perché il server del video li richiede per consegnare i segmenti.
 - **Download.** Per scaricare lo stream, Fluxy invia quegli stessi header **solo ai server da cui proviene il
   video**, come farebbe il player della pagina.
-- **Archiviazione locale.** L'elenco degli stream rilevati e dei download resta nella memoria di sessione del
-  browser e viene cancellato alla chiusura. Le impostazioni restano nella memoria locale dell'estensione. I segmenti
-  scaricati vengono scritti temporaneamente nello spazio privato dell'estensione (OPFS) e cancellati appena il file
-  finale è salvato nella cartella Download.
+- **Archiviazione locale.** L'elenco degli stream rilevati resta nella memoria di sessione del browser e viene
+  cancellato alla chiusura. La cronologia dei download (nome del file, titolo e indirizzo della pagina, tracce scelte,
+  avanzamento) e le impostazioni restano nella memoria locale dell'estensione, finché non le cancelli ("Cancella
+  cronologia" o "rimuovi"). Per i download in pausa, interrotti o falliti la cronologia conserva anche indirizzi e
+  header dello stream, così da poterli riprendere; quando un download è completato gli header (cookie compresi) vengono
+  eliminati. I segmenti scaricati vengono scritti temporaneamente nello spazio privato dell'estensione (OPFS):
+  vengono cancellati appena il file finale è salvato, oppure quando annulli o rimuovi un download incompleto.
 - **App locale (facoltativa).** Se la installi, l'estensione le passa gli stessi dati (indirizzi e header dello
   stream) per eseguire il download sul tuo computer. Il programma scrive un registro in `~/.cache/fluxy/host.log`
   con cookie e Authorization oscurati.
@@ -40,7 +43,7 @@ Per domande: apri una segnalazione nel repository del progetto.
 
 # Fluxy – Privacy policy
 
-*Last updated: 15 November 2026*
+*Last updated: 16 November 2026*
 
 **In short: Fluxy does not collect, store or send anyone personal data or data about your browsing.**
 
@@ -53,9 +56,13 @@ Per domande: apri una segnalazione nel repository del progetto.
   address it keeps the headers the player used (Referer, Origin, Cookie, Authorization), because the video server
   requires them to deliver the segments.
 - **Downloads.** Those headers are sent **only to the servers the video comes from**, as the page's player would.
-- **Local storage.** Detected streams and downloads live in the browser's session storage and are cleared when the
-  browser closes; settings stay in the extension's local storage. Downloaded segments are written temporarily to the
-  extension's private storage (OPFS) and deleted as soon as the final file is saved to your Downloads folder.
+- **Local storage.** Detected streams live in the browser's session storage and are cleared when the browser
+  closes. The download history (file name, page title and address, chosen tracks, progress) and the settings stay in
+  the extension's local storage until you clear them ("Clear history" or "remove"). For paused, interrupted or failed
+  downloads the history also keeps the stream addresses and headers, so they can be resumed; once a download has
+  completed, the headers (cookies included) are deleted. Downloaded segments are written temporarily to the
+  extension's private storage (OPFS) and deleted as soon as the final file is saved, or when you cancel or remove an
+  unfinished download.
 - **Local app (optional).** If you install it, the extension passes it the same data (stream addresses and headers)
   to run the download on your computer. It keeps a log in `~/.cache/fluxy/host.log` with cookies and Authorization
   redacted.
