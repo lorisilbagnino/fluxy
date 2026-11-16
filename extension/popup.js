@@ -2,20 +2,10 @@
 // Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
 import { DEFAULT_SETTINGS, childSet, isChild, isBlockedUrl, isPageSite } from './shared.js';
 import { DONATE_URL } from './build-flags.js';
-
-const t = (key, ...subs) => chrome.i18n.getMessage(key, subs.map(String)) || key;
-const UI_LANG = chrome.i18n.getUILanguage();
-
-/** Fills data-i18n / data-i18n-title / data-i18n-aria attributes under root. */
-function translate(root = document) {
-  for (const n of root.querySelectorAll('[data-i18n]')) n.textContent = t(n.dataset.i18n);
-  for (const n of root.querySelectorAll('[data-i18n-title]')) n.title = t(n.dataset.i18nTitle);
-  for (const n of root.querySelectorAll('[data-i18n-aria]')) n.setAttribute('aria-label', t(n.dataset.i18nAria));
-}
-
-
-const $ = (sel, root = document) => root.querySelector(sel);
-const send = (msg) => chrome.runtime.sendMessage(msg);
+import {
+  t, UI_LANG, translate, $, send, el, langLabel, nameIsJustLang, prettyCodec, listFmt, channelsLabel,
+  fmtBitrate, fmtDuration, fmtSize, renderJob, sortJobs,
+} from './ui.js';
 
 let tabId = null;
 let tabTitle = '';
@@ -26,93 +16,6 @@ let lastStreamsSig = '';
 let armedTabs = [];
 let lastStreams = [];
 let lastScan = null;       // {blobVideos, drmVideos} from the page scan
-
-// ------------------------------------------------------------ formatting ---
-const langNames = (() => {
-  try { return new Intl.DisplayNames([UI_LANG], { type: 'language' }); } catch { return null; }
-})();
-
-const langNamesEn = (() => {
-  try { return new Intl.DisplayNames(['en'], { type: 'language' }); } catch { return null; }
-})();
-
-/** true when a track NAME just repeats its language ("English", "Italiano", "ita"...). */
-function nameIsJustLang(name, code) {
-  if (!name) return true;
-  const n = name.trim().toLowerCase();
-  if (code && n === code.toLowerCase()) return true;
-  const cands = [];
-  try { cands.push(langNames?.of(code), langNamesEn?.of(code)); } catch {}
-  try { cands.push(new Intl.DisplayNames([code], { type: 'language' }).of(code)); } catch {}
-  return cands.filter(Boolean).some((c) => c.toLowerCase() === n);
-}
-
-function langLabel(code) {
-  if (!code) return t('langUnknown');
-  try {
-    const n = langNames?.of(code);
-    if (n && n.toLowerCase() !== code.toLowerCase()) return n.charAt(0).toUpperCase() + n.slice(1);
-  } catch {}
-  return code;
-}
-
-function prettyCodec(c) {
-  if (!c) return '';
-  const lc = c.toLowerCase();
-  const table = [
-    ['avc', 'H.264'], ['h264', 'H.264'], ['hvc1', 'HEVC'], ['hev1', 'HEVC'], ['hevc', 'HEVC'], ['dvh', 'Dolby Vision'],
-    ['av01', 'AV1'], ['av1', 'AV1'], ['vp09', 'VP9'], ['vp9', 'VP9'],
-    ['mp4a.40.5', 'HE-AAC'], ['mp4a.40.29', 'HE-AACv2'], ['mp4a', 'AAC'], ['aac', 'AAC'],
-    ['ac-3', 'AC3'], ['ac3', 'AC3'], ['ec-3', 'E-AC3'], ['eac3', 'E-AC3'], ['opus', 'Opus'], ['flac', 'FLAC'], ['mp3', 'MP3'],
-  ];
-  for (const [p, n] of table) if (lc.startsWith(p)) return n;
-  return c;
-}
-
-const listFmt = (items) => {
-  try { return new Intl.ListFormat(UI_LANG, { type: 'conjunction' }).format(items); } catch { return items.join(', '); }
-};
-
-function channelsLabel(ch) {
-  const n = parseInt(ch, 10);
-  return { 1: 'mono', 2: '2.0', 6: '5.1', 8: '7.1' }[n] || (n ? `${n} ch` : '');
-}
-
-function fmtBitrate(bps) {
-  if (!bps) return '';
-  return bps >= 1e6 ? `${(bps / 1e6).toFixed(1)} Mbps` : `${Math.round(bps / 1e3)} kbps`;
-}
-
-function fmtDuration(sec) {
-  if (!sec) return '';
-  sec = Math.round(sec);
-  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
-  return h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m ${String(s).padStart(2, '0')}s`;
-}
-
-function fmtSpeed(bps) {
-  if (!bps) return '';
-  return bps > 1048576 ? `${(bps / 1048576).toFixed(1)} MB/s` : `${Math.round(bps / 1024)} KB/s`;
-}
-
-function fmtEta(s) {
-  if (s == null || !isFinite(s)) return '';
-  s = Math.round(s);
-  return s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-
-function el(tag, attrs = {}, ...children) {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v == null || v === false) continue;
-    if (k === 'class') e.className = v;
-    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
-    else if (k in e && typeof v !== 'string') e[k] = v;
-    else e.setAttribute(k, v === true ? '' : v);
-  }
-  for (const c of children.flat()) if (c != null && c !== false) e.append(c.nodeType ? c : String(c));
-  return e;
-}
 
 // ------------------------------------------------------------- defaults ---
 function preferredLangs() {
@@ -354,11 +257,6 @@ function renderFileBody(s, d, body) {
     download));
 }
 
-function fmtSize(b) {
-  const fmt = (n, dg) => n.toLocaleString(UI_LANG, { minimumFractionDigits: dg, maximumFractionDigits: dg });
-  return b >= 1073741824 ? `${fmt(b / 1073741824, 2)} GB` : `${fmt(Math.max(0.1, b / 1048576), 1)} MB`;
-}
-
 function renderStream(s) {
   const card = $('#tpl-stream').content.firstElementChild.cloneNode(true);
   translate(card);
@@ -512,29 +410,10 @@ function renderStream(s) {
 }
 
 function renderJobs(jobs) {
-  const list = Object.values(jobs || {}).sort((a, b) => b.startedAt - a.startedAt);
+  const list = sortJobs(jobs);
   $('#jobs-head').hidden = list.length === 0;
-  $('#btn-clear-jobs').hidden = !list.some((j) => j.state !== 'running' && j.state !== 'saving');
-  $('#jobs').replaceChildren(...list.map((j) => {
-    const pct = Math.round((j.progress || 0) * 100);
-    const active = j.state === 'running' || j.state === 'saving';
-    const right = active
-      ? [fmtSpeed(j.speed), j.eta != null ? `ETA ${fmtEta(j.eta)}` : null, `${pct}%`].filter(Boolean).join(' · ')
-      : '';
-    const buttons = [];
-    if (active) buttons.push(el('button', { class: 'link', onclick: () => send({ type: 'cancel', jobId: j.id }) }, t('cancel')));
-    if (j.state === 'done') buttons.push(el('button', { class: 'link', onclick: () => send({ type: 'reveal', jobId: j.id }) }, j.engine === 'browser' ? t('showFile') : t('openFolder')));
-    if (!active) buttons.push(el('button', { class: 'link', onclick: () => send({ type: 'removeJob', jobId: j.id }) }, t('remove')));
-    return el('div', { class: `job ${j.state}` },
-      el('div', { class: 'job-top' },
-        el('span', { class: 'job-name', title: j.output || '' }, `${j.filename}.${j.container}`),
-        ...buttons),
-      el('div', { class: 'bar' }, el('i', { style: `width:${j.state === 'done' ? 100 : pct}%` })),
-      el('div', { class: 'job-info' },
-        el('span', {}, j.state === 'error' ? el('span', { class: 'err' }, j.error || t('error')) : `${j.stage || ''}${j.describe ? ' — ' + j.describe : ''}`),
-        el('span', {}, right)),
-    );
-  }));
+  $('#btn-clear-jobs').hidden = !list.some((j) => ['done', 'error', 'cancelled'].includes(j.state));
+  $('#jobs').replaceChildren(...list.map((j) => renderJob(j)));
 }
 
 // -------------------------------------------------------------- settings ---
@@ -623,6 +502,7 @@ async function init() {
   });
   $('#btn-stop').addEventListener('click', () => send({ type: 'disarm', tabId }));
   $('#btn-clear-jobs').addEventListener('click', () => send({ type: 'clearFinished' }));
+  $('#btn-manager').addEventListener('click', async () => { await send({ type: 'openManager' }); window.close(); });
   // Videos in the page itself (no playback needed): scanned every time the popup opens.
   send({ type: 'scan', tabId });
   // The local app is only started when it is the chosen engine (or the settings are opened).

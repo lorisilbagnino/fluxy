@@ -148,3 +148,8 @@ details.noise[open] > summary { margin-bottom: 8px; }
 .file-ext { color: var(--muted); font-size: 12px; }
 .file-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .opt .srt { font-size: 11px; flex-shrink: 0; }
+
+.head-actions { display: flex; gap: 12px; }
+.link.accent { color: var(--accent); }
+.job.paused .bar > i { background: var(--muted); }
+.err .hint { color: var(--muted); }

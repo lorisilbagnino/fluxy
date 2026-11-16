@@ -290,6 +290,79 @@
   "remove": {
     "message": "remove"
   },
+  "pause": {
+    "message": "pause"
+  },
+  "resume": {
+    "message": "resume"
+  },
+  "retryJob": {
+    "message": "retry"
+  },
+  "openManager": {
+    "message": "open ↗"
+  },
+  "openManagerTitle": {
+    "message": "Open the downloads page"
+  },
+  "managerTitle": {
+    "message": "Fluxy — Downloads"
+  },
+  "managerCounts": {
+    "message": "$p1$ active · $p2$ total",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "noDownloads": {
+    "message": "No downloads yet."
+  },
+  "audioShort": {
+    "message": "audio"
+  },
+  "subShort": {
+    "message": "sub"
+  },
+  "dVideo": {
+    "message": "Video"
+  },
+  "dAudio": {
+    "message": "Audio"
+  },
+  "dSubs": {
+    "message": "Subtitles"
+  },
+  "dEngine": {
+    "message": "Engine"
+  },
+  "dSource": {
+    "message": "Page"
+  },
+  "dSavedTo": {
+    "message": "Saved to"
+  },
+  "dStarted": {
+    "message": "Started"
+  },
+  "dRetries1": {
+    "message": "1 retry"
+  },
+  "dRetries": {
+    "message": "$p1$ retries",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "hint403": {
+    "message": "The server refused the request: the link may have expired. Retry renews it; if that's not enough, reopen the page, press Detect and retry."
+  },
   "error": {
     "message": "Error"
   },
@@ -462,6 +535,9 @@
   },
   "eng_stageSaving": {
     "message": "Saving"
+  },
+  "eng_stagePaused": {
+    "message": "Paused"
   },
   "eng_badRange": {
     "message": "The server doesn't honour partial downloads: try again"

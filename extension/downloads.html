@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fluxy</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="downloads.css">
+</head>
+<!-- Texts: data-i18n (text), data-i18n-title — keys in _locales/*/messages.json -->
+<body>
+  <header>
+    <img src="icons/icon48.png" alt="" width="32" height="32">
+    <h1 data-i18n="managerTitle"></h1>
+    <span id="counts" class="muted"></span>
+    <button id="btn-clear" class="ghost" data-i18n="clearFinished"></button>
+  </header>
+  <main>
+    <div id="list"></div>
+    <p id="empty" class="muted" data-i18n="noDownloads" hidden></p>
+  </main>
+  <footer><a id="credits" href="https://github.com/lorisilbagnino/fluxy" target="_blank" rel="noopener"></a></footer>
+  <script type="module" src="downloads.js"></script>
+</body>
+</html>

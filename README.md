@@ -175,6 +175,21 @@ If you register the app from the repository with `./host/install.sh` and then mo
   extension checks the available space before starting.
 - Local app: the file is written to a temporary `.flux-<id>` folder inside the destination and moved at the end.
 
+## Downloads: pause, resume, retry
+
+- **Pause / resume**: in-browser engine, the fetches stop and the segments already written stay in OPFS; resume
+  continues from the first missing one (direct files: from the last 8 MB piece). Local app: the running tool (yt-dlp
+  or ffmpeg) is suspended (`SIGSTOP`) and resumed. Not available while saving.
+- **Retry** (failed or cancelled downloads): continues from what was already downloaded (in-browser: the OPFS data
+  kept after the error; local app: the `.flux-<id>` folder, with finished tracks marked `tN.done`). Stream links
+  often carry short-lived tokens, so the track URLs are renewed first: from a newer detection of the same page
+  (after *Detect*) or by analysing the original playlist again. The local app also retries subtitles 3 times on
+  its own.
+- **Downloads page** (*open ↗* in the popup): every job with video quality, each audio track, each subtitle,
+  engine, source page, destination, start time and retries, plus the same actions. The popup shows a one-line
+  summary (*1080p · audio IT, EN · sub IT*).
+- Removing a paused or failed download deletes its staged data.
+
 ## Debug
 
 - Analysis from a terminal: `./host/fluxy_host.py probe "<url.m3u8>" "Referer: https://…"`

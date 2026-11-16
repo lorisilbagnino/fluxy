@@ -290,6 +290,79 @@
   "remove": {
     "message": "rimuovi"
   },
+  "pause": {
+    "message": "pausa"
+  },
+  "resume": {
+    "message": "riprendi"
+  },
+  "retryJob": {
+    "message": "riprova"
+  },
+  "openManager": {
+    "message": "apri ↗"
+  },
+  "openManagerTitle": {
+    "message": "Apri la pagina dei download"
+  },
+  "managerTitle": {
+    "message": "Fluxy — Download"
+  },
+  "managerCounts": {
+    "message": "$p1$ in corso · $p2$ in totale",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "noDownloads": {
+    "message": "Nessun download."
+  },
+  "audioShort": {
+    "message": "audio"
+  },
+  "subShort": {
+    "message": "sub"
+  },
+  "dVideo": {
+    "message": "Video"
+  },
+  "dAudio": {
+    "message": "Audio"
+  },
+  "dSubs": {
+    "message": "Sottotitoli"
+  },
+  "dEngine": {
+    "message": "Motore"
+  },
+  "dSource": {
+    "message": "Pagina"
+  },
+  "dSavedTo": {
+    "message": "Salvato in"
+  },
+  "dStarted": {
+    "message": "Avviato"
+  },
+  "dRetries1": {
+    "message": "1 nuovo tentativo"
+  },
+  "dRetries": {
+    "message": "$p1$ nuovi tentativi",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "hint403": {
+    "message": "Il server ha rifiutato la richiesta: il link potrebbe essere scaduto. Riprova lo rinnova; se non basta, riapri la pagina, premi Rileva e riprova."
+  },
   "error": {
     "message": "Errore"
   },
@@ -462,6 +535,9 @@
   },
   "eng_stageSaving": {
     "message": "Salvataggio"
+  },
+  "eng_stagePaused": {
+    "message": "In pausa"
   },
   "eng_badRange": {
     "message": "Il server non rispetta i download a pezzi: riprova"

@@ -1,0 +1,53 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later — Fluxy downloads page */
+:root {
+  --bg: #12151c; --surface: #1b2029; --surface-2: #232a35; --border: #2e3644;
+  --text: #e8ebf1; --muted: #8b95a7; --accent: #ffb020; --accent-ink: #1a1200;
+  --danger: #f2555a; --ok: #35c47c; --radius: 12px;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f6f7f9; --surface: #ffffff; --surface-2: #eef1f5; --border: #dde2ea;
+    --text: #18202c; --muted: #5d6879; --accent: #e08a00; --accent-ink: #ffffff;
+    color-scheme: light;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header {
+  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 12px;
+  padding: 14px max(16px, calc((100vw - 900px) / 2)); background: var(--bg); border-bottom: 1px solid var(--border);
+}
+header h1 { margin: 0; font-size: 19px; flex: 1; }
+main { max-width: 900px; margin: 0 auto; padding: 16px; }
+footer { max-width: 900px; margin: 0 auto; padding: 8px 16px 24px; }
+.muted { color: var(--muted); }
+a { color: var(--accent); }
+#credits { color: var(--muted); font-size: 12px; text-decoration: none; }
+#credits:hover { color: var(--text); text-decoration: underline; }
+
+button { font: inherit; cursor: pointer; }
+.ghost { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 5px 12px; font-size: 13px; }
+.ghost:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+.ghost.accent { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+.link { background: none; border: 0; padding: 0; color: var(--muted); text-decoration: underline; }
+
+.job { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px; display: grid; gap: 8px; min-width: 0; }
+.job-top { display: flex; gap: 8px; align-items: center; min-width: 0; flex-wrap: wrap; }
+.job-name { flex: 1; min-width: 200px; font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job-summary { color: var(--muted); font-size: 13px; }
+.bar { height: 6px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+.job.done .bar > i { background: var(--ok); }
+.job.error .bar > i, .job.cancelled .bar > i { background: var(--danger); }
+.job.paused .bar > i { background: var(--muted); }
+.job-info { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--muted); }
+.job-info > span:last-child { white-space: nowrap; }
+.err { color: var(--danger); word-break: break-word; }
+.err .hint { color: var(--muted); }
+.job-note { font-size: 12.5px; }
+.job-detail { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 4px 0 0; padding-top: 10px; border-top: 1px solid var(--border); font-size: 13px; }
+.job-detail dt { color: var(--muted); }
+.job-detail dd { margin: 0; white-space: pre-line; word-break: break-word; min-width: 0; }
+@media (max-width: 560px) { .job-detail { grid-template-columns: 1fr; } .job-detail dd { margin-bottom: 6px; } }

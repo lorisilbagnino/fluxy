@@ -431,6 +431,21 @@ function failRunningJobs(err, engine = 'native') {
   });
 }
 
+/** What a job downloads, shown in the popup (short) and on the downloads page (full). */
+const hostOf = (u) => { try { return new URL(u).hostname; } catch { return ''; } };
+function jobDetail(s, d, video, audio, subs) {
+  return {
+    kind: d.kind, title: s.title || '', pageUrl: s.pageUrl || '', host: hostOf(s.url),
+    video: video ? {
+      height: video.height || null, width: video.width || null, codec: video.codec || null, bandwidth: video.bandwidth || null,
+      fps: video.fps || null, label: video.label || null, size: video.size || null, ext: video.ext || null,
+    } : null,
+    audio: (audio || []).map((a) => ({ lang: a.lang || null, name: a.name || null, codec: a.codec || null, channels: a.channels || null })),
+    subs: (subs || []).map((x) => ({ lang: x.lang || null, name: x.name || null, forced: !!x.forced })),
+  };
+}
+const storedSpec = ({ strings, ...spec }) => spec;   // the strings are rebuilt at each (re)start
+
 const describeSel = (video, audio, subs) => [
   video ? `${video.height ? video.height + 'p' : 'video'}` : null,
   audio.length ? `${audio.length} audio` : null,
@@ -466,12 +481,13 @@ async function startDownload({ tabId, streamId, videoId, audioIds, subIds, conta
     url: s.url, headers: s.headers, container: container || settings.container,
     outputDir: settings.outputDir, fragments: Number(settings.fragments) || 8, parallel: Number(settings.fragments) || 8,
     title: filename || s.title, filename: filename || s.title, duration: d.duration,
-    video, audio, subs,
+    video, audio, subs, streamKind: d.kind, pageUrl: s.pageUrl || '',
     strings: engine === 'browser' ? engineStrings() : undefined,
   };
   await mutateJobs((jobs) => {
     jobs[jobId] = {
       id: jobId, engine, filename: spec.filename, container: spec.container, describe: describeSel(video, audio, subs),
+      detail: jobDetail(s, d, video, audio, subs), spec: storedSpec(spec),
       state: 'running', progress: 0, stage: tx('stageQueued'), startedAt: Date.now(),
       headers: engine === 'browser' ? s.headers : undefined,
     };
@@ -598,9 +614,11 @@ async function startSubsDownload(s, d, subs, filename, settings) {
   const spec = {
     kind: 'subs', url: s.url, headers: s.headers, subs, video: null, audio: [], filename: name, title: name,
     outputDir: settings.outputDir, duration: d.duration, strings: engine === 'browser' ? engineStrings() : undefined,
+    streamKind: d.kind, pageUrl: s.pageUrl || '',
   };
   await mutateJobs((jobs) => {
     jobs[jobId] = {
+      detail: jobDetail(s, d, null, [], subs), spec: storedSpec(spec),
       id: jobId, engine, filename: name, container: 'srt', describe: subs.map((x) => x.lang || '?').join(' · '),
       state: 'running', progress: 0, stage: tx('stageQueued'), startedAt: Date.now(),
       headers: engine === 'browser' ? s.headers : undefined,
@@ -625,6 +643,7 @@ async function startFileDownload(s, d, sourceId, filename) {
   };
   await mutateJobs((jobs) => {
     jobs[jobId] = {
+      detail: jobDetail(s, d, src, [], []), spec: storedSpec(spec),
       id: jobId, engine: 'browser', filename: name, container: src.ext,
       describe: [src.height ? `${src.height}p` : src.label || null, src.size ? fmtBytes(src.size) : null].filter(Boolean).join(' · '),
       state: 'running', progress: 0, stage: tx('stageQueued'), startedAt: Date.now(), headers: s.headers,
@@ -656,7 +675,8 @@ function localEngine() {
   return {
     prepare: load,
     start: async (jobId, spec) => { const r = await load(); keepAlive(); r.startJob(jobId, spec, bridge); },
-    cancel: async (jobId) => (await load()).cancelJob(jobId),
+    cancel: async (jobId) => (await load()).cancelJob(jobId, bridge),
+    pause: async (jobId) => (await load()).pauseJob(jobId),
     cleanup: async (jobId) => (await load()).cleanupJob(jobId),
   };
 }
@@ -683,6 +703,7 @@ function offscreenEngine() {
     prepare: ensure,
     start: (jobId, spec) => send('start', { jobId, spec }),
     cancel: (jobId) => send('cancel', { jobId }),
+    pause: (jobId) => send('pause', { jobId }),
     cleanup: async (jobId) => { if (await chrome.offscreen.hasDocument()) await send('cleanup', { jobId }); },
   };
 }
@@ -841,7 +862,107 @@ async function cancelJob(jobId) {
       await updateJob(jobId, { state: 'cancelled', stage: tx('stageCancelled') });
       browserEngine.cleanup(jobId);
     } else await browserEngine.cancel(jobId);
-  } else hostSend({ type: 'cancel', jobId });
+  } else if (j.state === 'running' || j.state === 'paused') {
+    hostSend({ type: 'cancel', jobId });
+  } else {
+    discardJobData(j);
+    await updateJob(jobId, { state: 'cancelled', stage: tx('stageCancelled') });
+  }
+}
+
+/** Drops what a paused / failed job keeps on disk for resume and retry. */
+function discardJobData(j) {
+  if (!['error', 'paused', 'cancelled'].includes(j.state)) return;
+  if (j.engine === 'browser') browserEngine.cleanup(j.id).catch(() => {});
+  else if (j.spec) { try { hostSend({ type: 'discard', jobId: j.id, outputDir: j.spec.outputDir }); } catch {} }
+}
+
+async function pauseJob(jobId) {
+  const j = (await getJobs())[jobId];
+  if (j?.state !== 'running' || j.kind === 'record') return;
+  if (j.engine === 'browser') await browserEngine.pause(jobId);
+  else hostSend({ type: 'pause', jobId });
+}
+
+async function resumeJob(jobId) {
+  const j = (await getJobs())[jobId];
+  if (j?.state !== 'paused') return;
+  await updateJob(jobId, { state: 'running', stage: tx('stageQueued') });
+  if (j.engine === 'browser') {
+    await browserEngine.prepare();
+    await browserEngine.start(jobId, { ...j.spec, strings: engineStrings() });
+  } else hostSend({ type: 'resume', jobId });
+}
+
+/**
+ * Retry a failed (or cancelled) job, continuing from the data already downloaded. Links of streams often
+ * carry short-lived tokens: the track URLs are refreshed first, from a newer detection of the same page
+ * (after "Detect") or by analysing the original playlist again.
+ */
+async function retryJob(jobId) {
+  const j = (await getJobs())[jobId];
+  if (!j?.spec || !['error', 'cancelled'].includes(j.state)) return;
+  const spec = await refreshSpec(j).catch(() => j.spec);
+  await mutateJobs((jobs) => {
+    const x = jobs[jobId];
+    if (x) Object.assign(x, { state: 'running', stage: tx('stageQueued'), error: undefined, finishedAt: undefined, retries: (x.retries || 0) + 1, spec, headers: x.engine === 'browser' ? spec.headers : undefined });
+  });
+  if (j.engine === 'browser') {
+    await browserEngine.prepare();
+    await browserEngine.start(jobId, { ...spec, strings: engineStrings() });
+  } else hostSend({ type: 'download', jobId, spec });
+}
+
+async function refreshSpec(j) {
+  const spec = j.spec;
+  if (!['hls', 'dash', 'page'].includes(spec.streamKind)) return spec;
+  let fresh = null;
+  const all = await chrome.storage.session.get(null);
+  for (const [k, v] of Object.entries(all)) {
+    if (!k.startsWith('tab:')) continue;
+    for (const s of v.streams || []) {
+      if (s.probe?.status === 'ok' && s.probe.data.master && s.kind === spec.streamKind && s.pageUrl && s.pageUrl === spec.pageUrl
+        && s.detectedAt > j.startedAt && (!fresh || s.detectedAt > fresh.s.detectedAt)) fresh = { s, d: s.probe.data };
+    }
+  }
+  if (!fresh) {
+    const s = { id: `retry-${j.id}`, url: spec.url, kind: spec.streamKind, headers: spec.headers };
+    fresh = { s, d: await analyse(s) };
+  }
+  const d = fresh.d;
+  const same = (a, b, keys) => keys.every((k) => (a[k] ?? null) === (b[k] ?? null));
+  const find = (list, old, tries) => {
+    for (const keys of tries) { const hit = list.find((x) => same(x, old, keys)); if (hit) return hit; }
+    return null;
+  };
+  let video = null;
+  if (spec.video) {
+    video = find(d.video, spec.video, [['formatId'], ['height', 'codec', 'bandwidth'], ['height', 'codec'], ['height']].filter((k) => k.every((x) => spec.video[x] != null)));
+    if (!video) return spec;
+  }
+  const audio = [];
+  for (const a of spec.audio || []) {
+    const hit = find(d.audio, a, [['formatId'], ['lang', 'name', 'codec', 'channels'], ['lang', 'codec'], ['lang', 'name']].filter((k) => k.every((x) => a[x] != null)));
+    if (!hit) return spec;
+    audio.push(hit);
+  }
+  const subs = [];
+  for (const x of spec.subs || []) {
+    const hit = find(d.subs, x, [['ytLang'], ['lang', 'name', 'forced'], ['lang', 'forced']].filter((k) => k.every((y) => x[y] != null)));
+    if (!hit) return spec;
+    subs.push(hit);
+  }
+  return { ...spec, url: fresh.s.url, headers: fresh.s.headers || spec.headers, video, audio, subs };
+}
+
+/** The downloads page: focus it if already open. */
+async function openManager() {
+  const url = chrome.runtime.getURL('downloads.html');
+  const [tab] = await chrome.tabs.query({ url });
+  if (tab) {
+    await chrome.tabs.update(tab.id, { active: true });
+    if (tab.windowId != null) chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
+  } else await chrome.tabs.create({ url });
 }
 
 async function reveal(jobId) {
@@ -866,11 +987,19 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
       case 'cancel': await cancelJob(msg.jobId); return {};
       case 'reveal': await reveal(msg.jobId); return {};
       case 'removeJob':
-        await mutateJobs((jobs) => { delete jobs[msg.jobId]; });
+        await mutateJobs((jobs) => { if (jobs[msg.jobId]) discardJobData(jobs[msg.jobId]); delete jobs[msg.jobId]; });
         return {};
       case 'clearFinished':
-        await mutateJobs((jobs) => { for (const [k, j] of Object.entries(jobs)) if (j.state !== 'running' && j.state !== 'saving') delete jobs[k]; });
+        await mutateJobs((jobs) => {
+          for (const [k, j] of Object.entries(jobs)) {
+            if (['done', 'error', 'cancelled'].includes(j.state)) { discardJobData(j); delete jobs[k]; }
+          }
+        });
         return {};
+      case 'pause': await pauseJob(msg.jobId); return {};
+      case 'resume': await resumeJob(msg.jobId); return {};
+      case 'retry': await retryJob(msg.jobId); return {};
+      case 'openManager': await openManager(); return {};
       case 'clearTab': await clearTab(msg.tabId); return {};
       case 'arm': await armTab(msg.tabId); return {};
       case 'disarm': await setArmed(msg.tabId, false); return {};

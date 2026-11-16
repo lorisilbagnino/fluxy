@@ -29,7 +29,7 @@ import traceback
 import urllib.parse
 import urllib.request
 
-VERSION = "0.6.2"
+VERSION = "0.7.0"
 CACHE_DIR = os.path.join(os.path.expanduser("~/.cache"), "fluxy")
 LOG_FILE = os.path.join(CACHE_DIR, "host.log")
 UA_FALLBACK = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -106,6 +106,7 @@ TEXT = {
         "Download {label} ({i}/{n})": "Download {label} ({i}/{n})",
         "Subtitles {lang} ({i}/{n})": "Sottotitoli {lang} ({i}/{n})",
         "Merging into one file": "Unione in un unico file",
+        "Paused": "In pausa",
         "{label} file not found after the download": "File {label} non trovato dopo il download",
         "{lang} subtitles not downloaded": "Sottotitoli {lang} non scaricati",
         "{lang} subtitles are empty": "Sottotitoli {lang} vuoti",
@@ -616,6 +617,9 @@ class Job:
         self.tmp = None
         self.last_emit = 0.0
         self.last_stage = None
+        self.paused = False
+        self.resumed = threading.Event()
+        self.resumed.set()
 
     # -- reporting --------------------------------------------------------
     def emit(self, force=False, **fields):
@@ -630,6 +634,7 @@ class Job:
 
     # -- process helpers --------------------------------------------------
     def run(self, cmd: list[str], on_line=None):
+        self.resumed.wait()          # paused between two steps: don't start the next one
         if self.cancelled:
             raise Cancelled()
         log("run", redact(" ".join(cmd)))
@@ -670,9 +675,40 @@ class Job:
         p = self.proc
         if p and p.poll() is None:
             try:
+                if self.paused:
+                    os.killpg(p.pid, signal.SIGCONT)   # a stopped process can't handle SIGTERM
                 os.killpg(p.pid, signal.SIGTERM)
             except OSError:
                 pass
+        self.paused = False
+        self.resumed.set()
+
+    # Pause = SIGSTOP on the running tool (yt-dlp / ffmpeg) and its children; nothing is lost.
+    def pause(self):
+        if self.paused or self.cancelled:
+            return
+        self.paused = True
+        self.resumed.clear()
+        p = self.proc
+        if p and p.poll() is None:
+            try:
+                os.killpg(p.pid, signal.SIGSTOP)
+            except OSError:
+                pass
+        self.emit(force=True, state="paused", stage=T("Paused"), speed=None, eta=None)
+
+    def resume(self):
+        if not self.paused:
+            return
+        self.paused = False
+        p = self.proc
+        if p and p.poll() is None:
+            try:
+                os.killpg(p.pid, signal.SIGCONT)
+            except OSError:
+                pass
+        self.resumed.set()
+        self.emit(force=True, state="running", stage=self.last_stage)
 
     # -- main -------------------------------------------------------------
     def start(self):
@@ -686,11 +722,15 @@ class Job:
             self.emit(force=True, state="cancelled", stage=T("Cancelled"))
         except Exception as e:  # noqa: BLE001
             log("job error", traceback.format_exc())
-            self.emit(force=True, state="error", stage=T("Error"), error=str(e))
-        finally:
+            self.emit(force=True, state="error", stage=T("Error"), error=str(e), speed=None, eta=None)
             if self.tmp and os.path.isdir(self.tmp) and not self.spec.get("keepTemp"):
-                shutil.rmtree(self.tmp, ignore_errors=True)
-            JOBS.pop(self.id, None)
+                return self._done()     # keep .flux-<id> for "retry" (removed by "discard")
+        if self.tmp and os.path.isdir(self.tmp) and not self.spec.get("keepTemp"):
+            shutil.rmtree(self.tmp, ignore_errors=True)
+        self._done()
+
+    def _done(self):
+        JOBS.pop(self.id, None)
 
     def _work(self) -> str:
         s = self.spec
@@ -727,6 +767,14 @@ class Job:
             stage = T("Download {label} ({i}/{n})", label=label, i=i + 1, n=n)
             report(stage, 0, weights[i])
             prefix = os.path.join(self.tmp, f"t{i}")
+            marker = prefix + ".done"
+            found = [f for f in glob.glob(prefix + ".*") if not f.endswith((".json", ".part", ".ytdl", ".done"))]
+            if os.path.exists(marker) and found:
+                files.append((role, t, found[0]))
+                done_w += weights[i]
+                continue
+            for f in glob.glob(prefix + ".*"):      # leftovers of an interrupted attempt
+                os.remove(f)
 
             ff = {"t": None, "bytes": None}
 
@@ -768,9 +816,10 @@ class Job:
             else:
                 cmd += [t["url"]]
             self.run(cmd, on_line)
-            found = [f for f in glob.glob(prefix + ".*") if not f.endswith((".json", ".part", ".ytdl"))]
+            found = [f for f in glob.glob(prefix + ".*") if not f.endswith((".json", ".part", ".ytdl", ".done"))]
             if not found:
                 raise RuntimeError(T("{label} file not found after the download", label=label))
+            open(marker, "w").close()
             files.append((role, t, found[0]))
             done_w += weights[i]
 
@@ -790,9 +839,19 @@ class Job:
                     raise RuntimeError(T("{lang} subtitles not downloaded", lang=sub.get("lang")))
                 os.replace(got[0], dst)
             else:
-                self.run(["ffmpeg", "-nostdin", "-v", "error", "-y", *ffmpeg_header_args(headers),
-                          "-extension_picky", "0", "-i", sub["url"], "-map", "0:s:0?",
-                          "-c:s", "srt", dst])
+                for attempt in range(3):
+                    try:
+                        self.run(["ffmpeg", "-nostdin", "-v", "error", "-y", *ffmpeg_header_args(headers),
+                                  "-extension_picky", "0", "-i", sub["url"], "-map", "0:s:0?",
+                                  "-c:s", "srt", dst])
+                        break
+                    except Cancelled:
+                        raise
+                    except RuntimeError:
+                        if attempt == 2:
+                            raise
+                        log("subtitles failed, retrying", attempt + 1)
+                        time.sleep(2 * (attempt + 1))
                 if not os.path.exists(dst) or os.path.getsize(dst) == 0:
                     raise RuntimeError(T("{lang} subtitles are empty", lang=sub.get("lang")))
                 clean_srt(dst)
@@ -914,6 +973,17 @@ def handle(msg: dict):
         job = JOBS.get(msg.get("jobId"))
         if job:
             job.cancel()
+    elif t in ("pause", "resume"):
+        job = JOBS.get(msg.get("jobId"))
+        if job:
+            job.pause() if t == "pause" else job.resume()
+    elif t == "discard":
+        # temp folder kept by a failed job for "retry"
+        jid = re.sub(r"[^\w-]", "", msg.get("jobId") or "")
+        out_dir = os.path.expanduser(msg.get("outputDir") or "~/Downloads")
+        tmp = os.path.join(out_dir, f".flux-{jid}")
+        if jid and jid not in JOBS and os.path.isdir(tmp):
+            shutil.rmtree(tmp, ignore_errors=True)
     elif t == "reveal":
         path = msg.get("path") or ""
         target = os.path.dirname(path) if os.path.isfile(path) else path
@@ -951,7 +1021,9 @@ def main():
             handle(msg)
         except Exception:  # noqa: BLE001
             log("handler error", traceback.format_exc())
-    # Browser closed the port: let running downloads finish.
+    # Browser closed the port: let running downloads finish (paused ones too).
+    for job in list(JOBS.values()):
+        job.resume()
     while JOBS:
         time.sleep(1)
     log("host exit")

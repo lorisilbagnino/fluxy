@@ -107,6 +107,19 @@ Vedi le sezioni corrispondenti del [README inglese](README.md#debug). In breve: 
 `~/.cache/fluxy/host.log`; app locale testata su Linux (macOS da provare, Windows non ancora); niente DRM;
 `EXT-X-DISCONTINUITY` non riallineato nel motore nel browser.
 
+## Download: pausa, ripresa, riprova
+
+- **Pausa / riprendi**: nel motore del browser i segmenti già scritti restano e alla ripresa si continua dal primo
+  mancante (file diretti: dall'ultimo pezzo da 8 MB); con l'app locale lo strumento in corso (yt-dlp o ffmpeg) viene
+  sospeso e ripreso. Non disponibile durante il salvataggio.
+- **Riprova** (download falliti o annullati): riparte da quanto già scaricato. I link degli stream hanno spesso token a
+  scadenza, quindi prima vengono rinnovati: da un rilevamento più recente della stessa pagina (dopo *Rileva*) o
+  rianalizzando la playlist originale. L'app locale riprova anche da sola i sottotitoli, fino a 3 volte.
+- **Pagina dei download** (*apri ↗* nel popup): ogni download con qualità video, tracce audio, sottotitoli, motore,
+  pagina di origine, destinazione, ora di avvio e tentativi, con le stesse azioni. Nel popup c'è un riepilogo su una
+  riga (*1080p · audio IT, EN · sub IT*).
+- Rimuovendo un download in pausa o fallito si cancellano anche i suoi dati temporanei.
+
 ## Licenza
 
 Fluxy è software libero: [GNU GPL v3.0 o successiva](LICENSE), con i [termini aggiuntivi](ADDITIONAL-TERMS.md)

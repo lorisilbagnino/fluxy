@@ -9,7 +9,9 @@ import { setMaxConnections, CancelledError } from './net.js';
 import { m, setStrings } from './i18n.js';
 
 const JOB_PREFIX = 'flux-job-';
-const jobs = new Map();   // jobId -> {ctrl, dir, urls: []}
+// jobId -> {ctrl, dir, urls, saved, running, pausing}. Kept after a pause or an error, so that resume and
+// retry continue from the data already on disk; removed by cleanupJob (cancel, remove, saved).
+const jobs = new Map();
 
 async function opfsRoot() { return navigator.storage.getDirectory(); }
 
@@ -25,24 +27,51 @@ export async function cleanupOrphans() {
 
 function gb(bytes) { return (bytes / 1073741824).toLocaleString(undefined, { maximumFractionDigits: 1 }); }
 
+/** Starts a job, or resumes/retries it (same jobId) from what an earlier run left on disk. */
 export async function startJob(jobId, spec, bridge) {
-  const ctrl = new AbortController();
-  const job = { ctrl, dir: null, urls: [] };
-  jobs.set(jobId, job);
+  let job = jobs.get(jobId);
+  if (job?.running) return;
+  if (!job) { job = { dir: null, urls: [], saved: { tracks: [], file: {} } }; jobs.set(jobId, job); }
+  job.ctrl = new AbortController();
+  job.running = true;
+  job.pausing = false;
   const emit = (f) => bridge.emit(jobId, f);
   setStrings(spec.strings);
   try {
     const res = await ({ file: runFile, subs: runSubs }[spec.kind] || run)(jobId, spec, job, emit, bridge);
+    job.running = false;
     emit({ state: 'saving', progress: 0.99, stage: m('eng_stageSaving'), speed: null, eta: null, files: res });
   } catch (e) {
-    const cancelled = e instanceof CancelledError || ctrl.signal.aborted;
-    if (!cancelled) console.error('[flux] job failed', e);
-    emit(cancelled ? { state: 'cancelled', stage: m('stageCancelled') } : { state: 'error', stage: m('stageError'), error: e.message || String(e) });
-    await cleanupJob(jobId);
+    job.running = false;
+    const aborted = e instanceof CancelledError || job.ctrl.signal.aborted;
+    if (aborted && job.pausing) {
+      emit({ state: 'paused', stage: m('eng_stagePaused'), speed: null, eta: null });
+    } else if (aborted) {
+      emit({ state: 'cancelled', stage: m('stageCancelled') });
+      await cleanupJob(jobId);
+    } else {
+      console.error('[flux] job failed', e);
+      // the staged data stays: "retry" continues from it
+      emit({ state: 'error', stage: m('stageError'), error: e.message || String(e), speed: null, eta: null });
+    }
   }
 }
 
-export function cancelJob(jobId) { jobs.get(jobId)?.ctrl.abort(); }
+/** Pause: stop fetching, keep everything written so far. */
+export function pauseJob(jobId) {
+  const job = jobs.get(jobId);
+  if (!job?.running) return;
+  job.pausing = true;
+  job.ctrl.abort();
+}
+
+/** Cancel: a running job stops and cleans up; a paused or failed one is just cleaned up. */
+export async function cancelJob(jobId, bridge) {
+  const job = jobs.get(jobId);
+  if (job?.running) { job.pausing = false; job.ctrl.abort(); return; }
+  await cleanupJob(jobId);
+  bridge?.emit(jobId, { state: 'cancelled', stage: m('stageCancelled') });
+}
 
 export async function cleanupJob(jobId) {
   const job = jobs.get(jobId);
@@ -78,10 +107,10 @@ async function runFile(jobId, spec, job, emit, bridge) {
       speed, eta: speed > 0 && p.total ? Math.max(0, (p.total - p.bytes) / speed) : null,
     });
   };
-  report({ bytes: 0, total: spec.size || 0 }, true);
+  report({ bytes: job.saved.file.bytes || 0, total: spec.size || 0 }, true);
   const file = await downloadFile(spec.url, {
     dir: job.dir, name: `file.${spec.ext || 'bin'}`, fetchOpts, parallel: Math.min(6, spec.parallel || 6),
-    size: spec.size, ranges: spec.ranges, onProgress: (p) => report(p),
+    size: spec.size, ranges: spec.ranges, onProgress: (p) => report(p), state: job.saved.file,
     ensureHosts: (urls) => bridge.ensureHosts(jobId, urls),
   });
   const url = URL.createObjectURL(file);
@@ -165,10 +194,14 @@ async function run(jobId, spec, job, emit, bridge) {
     });
   };
   report(true);
-  const dls = await Promise.all(wanted.map((w, i) => downloadTrack(w.url, {
-    dir: job.dir, name: `t${i}`, fetchOpts, parallel: spec.parallel || 8, ensureHosts,
-    onProgress: (p) => { Object.assign(state[i], p); report(); },
-  })));
+  const dls = await Promise.all(wanted.map((w, i) => {
+    const key = [w.type, w.height || '', w.lang || '', w.name || '', w.codec || ''].join('|');
+    if (job.saved.tracks[i]?.key !== key) job.saved.tracks[i] = { key };
+    return downloadTrack(w.url, {
+      dir: job.dir, name: `t${i}`, fetchOpts, parallel: spec.parallel || 8, ensureHosts, state: job.saved.tracks[i],
+      onProgress: (p) => { Object.assign(state[i], p); report(); },
+    });
+  }));
 
   // ---- mux ---------------------------------------------------------------
   const duration = Math.max(...dls.map((d) => d.duration)) || spec.duration;
