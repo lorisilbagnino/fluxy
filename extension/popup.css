@@ -158,3 +158,9 @@ header .gh:hover { color: var(--text); text-decoration: underline; }
 .conns { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
 .speed-limit-wrap { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); }
 .speed-limit-wrap select { width: auto; padding: 2px 4px; font-size: 12px; }
+
+.track { grid-template-columns: minmax(0, 9em) 1fr 3.2em 1.2em; }
+.track-skip { font-size: 11px; text-decoration: none; justify-self: center; }
+.track-skip:hover { color: var(--danger); }
+.track.skipped { opacity: .55; }
+.track.skipped .track-name { text-decoration: line-through; }

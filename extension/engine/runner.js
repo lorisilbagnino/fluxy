@@ -32,7 +32,10 @@ function gb(bytes) { return (bytes / 1073741824).toLocaleString(undefined, { max
 export async function startJob(jobId, spec, bridge) {
   let job = jobs.get(jobId);
   if (job?.running) return;
-  if (!job) { job = { dir: null, urls: [], saved: { tracks: [], file: {} } }; jobs.set(jobId, job); }
+  if (!job) { job = { dir: null, urls: [], saved: { byKey: {}, file: {} }, skip: new Set() }; jobs.set(jobId, job); }
+  // tracks dropped by the user (index in video, audio…, subtitles order), also before this run
+  [spec.video, ...(spec.audio || []), ...(spec.subs || [])].filter((x) => x !== null && x !== undefined)
+    .forEach((x, i) => { if (x.skip) job.skip.add(i); });
   job.ctrl = new AbortController();
   job.pool = createPool(spec.parallel || 8);   // "connections per download"
   if (spec.speedLimit != null) setSpeedLimit(spec.speedLimit);
@@ -59,6 +62,20 @@ export async function startJob(jobId, spec, bridge) {
     }
   }
 }
+
+/** Skip one track (index in video, audio…, subtitles order): stop it and leave it out of the file. */
+export function skipTrack(jobId, index) {
+  const job = jobs.get(jobId);
+  if (!job) return;
+  job.skip.add(index);
+  job.trackCtrls?.[index]?.abort();
+}
+
+const nameFor = (key) => {   // stable temp file name for a track (survives skipped neighbours and retries)
+  let h = 5381;
+  for (const c of key) h = ((h * 33) ^ c.charCodeAt(0)) >>> 0;
+  return `t-${h.toString(36)}`;
+};
 
 /** Pause: stop fetching, keep everything written so far. */
 export function pauseJob(jobId) {
@@ -180,19 +197,20 @@ async function run(jobId, spec, job, emit, bridge) {
 
   // per-track progress shown under the job's bar (subtitles are fetched while merging)
   const trackView = (subsDone = false) => [
-    ...wanted.map((w, i) => ({ k: w.type, l: w.type === 'video' ? (w.height ? `${w.height}p` : '') : (w.lang || ''), f: +(state[i].total ? state[i].done / state[i].total : 0).toFixed(3) })),
-    ...(spec.subs || []).map((x) => ({ k: 'sub', l: (x.lang || '') + (x.forced ? ' forced' : ''), f: subsDone ? 1 : 0 })),
+    ...wanted.map((w, i) => ({ k: w.type, l: w.type === 'video' ? (w.height ? `${w.height}p` : '') : (w.lang || ''), f: +(state[i].total ? state[i].done / state[i].total : 0).toFixed(3), ...(job.skip.has(i) ? { s: true } : {}) })),
+    ...(spec.subs || []).map((x, j) => ({ k: 'sub', l: (x.lang || '') + (x.forced ? ' forced' : ''), f: subsDone ? 1 : 0, ...(job.skip.has(wanted.length + j) ? { s: true } : {}) })),
   ];
 
   // ---- download (90% of the bar) -----------------------------------------
   const state = wanted.map((w) => ({ bytes: 0, done: 0, total: 0, guess: (w.bandwidth || (w.type === 'video' ? 3e6 : 128e3)) * (spec.duration || 600) / 8 }));
   let lastEmit = 0, lastBytes = 0, lastT = performance.now(), speed = null;
-  const base = job.saved.tracks.reduce((a, t) => a + (t?.bytes || 0), 0);   // already on disk from an earlier run
+  const base = Object.values(job.saved.byKey).reduce((a, t) => a + (t?.bytes || 0), 0);   // already on disk from an earlier run
   const report = (force) => {
     const now = performance.now();
     if (!force && now - lastEmit < 500) return;
-    const bytes = Math.max(state.reduce((a, s) => a + s.bytes, 0), base + job.pool.received);
-    const expected = state.reduce((a, s) => a + (s.done ? s.bytes / s.done * s.total : s.guess), 0);
+    const live = state.filter((_, i) => !job.skip.has(i));
+    const bytes = Math.max(live.reduce((a, s) => a + s.bytes, 0), base + job.pool.received);
+    const expected = live.reduce((a, s) => a + (s.done ? s.bytes / s.done * s.total : s.guess), 0);
     if (now - lastT > 1000) {
       const inst = (bytes - lastBytes) / ((now - lastT) / 1000);
       speed = speed == null ? inst : speed * 0.7 + inst * 0.3;
@@ -205,33 +223,48 @@ async function run(jobId, spec, job, emit, bridge) {
       speed, eta: speed > 0 ? Math.max(0, (expected - bytes) / speed) : null,
       tracks: trackView(),
       // the total of a stream is estimated from the average segment size until every track is complete
-      bytes, total: Math.round(expected), approx: !state.every((s) => s.total && s.done >= s.total),
+      bytes, total: Math.round(expected), approx: !live.every((s) => s.total && s.done >= s.total),
       conns: { active: job.pool.active, max: job.pool.max },
     });
   };
   report(true);
   const ticker = setInterval(() => report(), 700);
-  const dls = await Promise.all(wanted.map((w, i) => {
+  job.trackCtrls = [...wanted, ...(spec.subs || [])].map(() => new AbortController());
+  const names = [];
+  const dls = await Promise.all(wanted.map(async (w, i) => {
     const key = [w.type, w.height || '', w.lang || '', w.name || '', w.codec || ''].join('|');
-    if (job.saved.tracks[i]?.key !== key) job.saved.tracks[i] = { key };
-    return downloadTrack(w.url, {
-      dir: job.dir, name: `t${i}`, fetchOpts, parallel: spec.parallel || 8, ensureHosts, state: job.saved.tracks[i],
-      onProgress: (p) => { Object.assign(state[i], p); report(); },
-    });
+    const saved = (job.saved.byKey[key] ||= { key });
+    names[i] = nameFor(key);
+    if (job.skip.has(i)) return null;
+    try {
+      return await downloadTrack(w.url, {
+        dir: job.dir, name: names[i], ensureHosts, state: saved, parallel: spec.parallel || 8,
+        fetchOpts: { ...fetchOpts, signal: AbortSignal.any([signal, job.trackCtrls[i].signal]) },
+        onProgress: (p) => { Object.assign(state[i], p); report(); },
+      });
+    } catch (e) {
+      if (job.skip.has(i) && !signal.aborted) return null;   // dropped by the user
+      for (const c of job.trackCtrls) c.abort();               // a real failure stops the other tracks too
+      throw e;
+    }
   })).finally(() => clearInterval(ticker));
+  job.trackCtrls = null;
 
   // ---- mux ---------------------------------------------------------------
-  const duration = Math.max(...dls.map((d) => d.duration)) || spec.duration;
+  const got = dls.filter(Boolean);   // skipped tracks are null
+  const duration = Math.max(...got.map((d) => d.duration)) || spec.duration;
   const container = spec.container === 'mp4' ? 'mp4' : 'mkv';
   const out = await job.dir.getFileHandle(`out.${container}`, { create: true });
-  const subs = (spec.subs || []).map((s) => ({ ...s }));
+  const subs = (spec.subs || []).map((s) => ({ ...s })).filter((_, j) => !job.skip.has(wanted.length + j));
   let stage = m('eng_stageMux');
   // A lone media playlist may turn out to be audio only: then the video track is optional.
-  const tracks = wanted.map((w, i) => ({ dl: dls[i], type: w.type, lang: w.lang, name: w.name, optional: w.type === 'video' && !!w.maybeAudio }));
+  const tracks = wanted.map((w, i) => ({ dl: dls[i], type: w.type, lang: w.lang, name: w.name, optional: w.type === 'video' && !!w.maybeAudio }))
+    .filter((x) => x.dl);
+  if (!tracks.length) throw new Error(m('eng_nothingToMux'));
   // audio muxed inside the video rendition, when no separate audio was chosen
-  if (spec.video && !(spec.audio || []).length) tracks.push({ dl: dls[0], type: 'audio', lang: spec.video.audioLang, optional: true });
+  if (spec.video && dls[0] && !tracks.some((x) => x.type === 'audio')) tracks.push({ dl: dls[0], type: 'audio', lang: spec.video.audioLang, optional: true });
   emit({ state: 'running', progress: 0.9, stage, speed: null, eta: null, conns: null, approx: false,
-    total: dls.reduce((a, d) => a + d.file.size, 0), bytes: dls.reduce((a, d) => a + d.file.size, 0) });
+    total: got.reduce((a, d) => a + d.file.size, 0), bytes: got.reduce((a, d) => a + d.file.size, 0) });
   const file = await mux({
     tracks, subs, container, outHandle: out, duration, fetchOpts, ensureHosts,
     onStage: (s) => { stage = s; emit({ state: 'running', stage: s, tracks: trackView(s !== m('eng_stageSubs')) }); },
@@ -239,7 +272,7 @@ async function run(jobId, spec, job, emit, bridge) {
   });
 
   // Free the staged tracks before the browser copies the result to Downloads.
-  for (let i = 0; i < dls.length; i++) await job.dir.removeEntry(`t${i}`).catch(() => {});
+  for (const n of names) await job.dir.removeEntry(n).catch(() => {});
 
   const files = [{ url: URL.createObjectURL(file), ext: container, size: file.size, main: true }];
   // MP4: subtitles as .srt next to the video, players pick them up automatically

@@ -80,7 +80,7 @@ export function fmtDuration(sec) {
 }
 
 export function fmtSpeed(bps) {
-  if (!bps) return '';
+  if (!bps || bps < 1024) return '';
   const f = (n, d) => n.toLocaleString(UI_LANG, { minimumFractionDigits: d, maximumFractionDigits: d });
   return bps > 1048576 ? `${f(bps / 1048576, 1)} MB/s` : `${f(bps / 1024, 0)} KB/s`;
 }
@@ -151,7 +151,8 @@ function nameEditor(j, full) {
 }
 
 const ACTIVE = ['running', 'saving'];
-const langCodes = (list) => list.map((x) => `${(x.lang || '?').split(/[-_]/)[0].toUpperCase()}${x.forced ? ` (${t('forced')})` : ''}`).join(', ');
+const isForced = (x) => !!x.forced || /forced/i.test(`${x.lang || ''} ${x.name || ''}`);
+const langCodes = (list) => list.filter((x) => !x.skip).map((x) => `${(x.lang || '?').split(/[-_ ]/)[0].toUpperCase()}${isForced(x) ? ` (${t('forced')})` : ''}`).join(', ');
 
 /** "1080p · audio IT, EN · sub IT, IT (forced)" */
 export function jobSummary(j) {
@@ -159,8 +160,8 @@ export function jobSummary(j) {
   if (!d) return j.describe || '';
   return [
     d.video ? (d.video.height ? `${d.video.height}p` : d.video.label || (d.video.ext || '').toUpperCase() || t('video')) : null,
-    d.audio.length ? `${t('audioShort')} ${langCodes(d.audio)}` : null,
-    d.subs.length ? `${t('subShort')} ${langCodes(d.subs)}` : null,
+    d.audio.some((x) => !x.skip) ? `${t('audioShort')} ${langCodes(d.audio)}` : null,
+    d.subs.some((x) => !x.skip) ? `${t('subShort')} ${langCodes(d.subs)}` : null,
   ].filter(Boolean).join(' · ');
 }
 
@@ -184,10 +185,11 @@ function detailRows(j) {
   const v = d.video;
   if (v) rows.push([t('dVideo'), [v.width && v.height ? `${v.width}×${v.height}` : v.height ? `${v.height}p` : v.label, v.codec ? prettyCodec(v.codec) : null,
     v.fps && v.fps > 31 ? `${Math.round(v.fps)} fps` : null, fmtBitrate(v.bandwidth), v.size ? fmtSize(v.size) : null, v.ext ? v.ext.toUpperCase() : null].filter(Boolean).join(' · ')]);
+  const skipNote = (x) => (x.skip ? ` — ${t('skipped')}` : '');
   if (d.audio?.length) rows.push([t('dAudio'), d.audio.map((a) => [langLabel(a.lang) + (a.name && !nameIsJustLang(a.name, a.lang) ? ` — ${a.name}` : ''),
-    prettyCodec(a.codec), channelsLabel(a.channels)].filter(Boolean).join(' · ')).join('\n')]);
+    prettyCodec(a.codec), channelsLabel(a.channels)].filter(Boolean).join(' · ') + skipNote(a)).join('\n')]);
   if (d.subs?.length) rows.push([t('dSubs'), d.subs.map((x) => langLabel(x.lang) + (x.name && !nameIsJustLang(x.name, x.lang) ? ` — ${x.name}` : '')
-    + (x.forced ? ` (${t('forced')})` : '')).join('\n')]);
+    + (x.forced ? ` (${t('forced')})` : '') + skipNote(x)).join('\n')]);
   rows.push([t('dEngine'), `${j.engine === 'browser' ? t('pillBrowser') : t('pillNative')} · ${(j.container || '').toUpperCase()}`]);
   if (d.pageUrl || d.host) rows.push([t('dSource'), d.pageUrl ? el('a', { href: d.pageUrl, target: '_blank', rel: 'noopener', title: d.pageUrl }, d.title || d.pageUrl) : d.host]);
   if (j.output) rows.push([t('dSavedTo'), j.output]);
@@ -230,12 +232,21 @@ export function renderJob(j, { full = false } = {}) {
 function trackBars(j) {
   if (!['running', 'paused', 'queued'].includes(j.state) || !(j.tracks?.length > 1)) return null;
   const kind = { video: t('video'), audio: t('audio'), sub: t('subtitles') };
-  return el('div', { class: 'tracks' }, ...j.tracks.map((x) => {
+  const label = (x) => {
+    if (x.k === 'video') return `${kind.video} ${x.l || ''}`.trim();
+    const code = (x.l || '').split(/[-_ ]/)[0].toUpperCase();
+    return `${kind[x.k] || x.k} ${code}${/forced/i.test(x.l || '') ? ` (${t('forced')})` : ''}`.trim();
+  };
+  return el('div', { class: 'tracks' }, ...j.tracks.map((x, i) => {
     const pct = Math.round((x.f || 0) * 100);
-    return el('div', { class: `track${pct >= 100 ? ' done' : ''}` },
-      el('span', { class: 'track-name' }, `${kind[x.k] || x.k} ${x.k === 'video' ? x.l || '' : (x.l || '').toUpperCase().replace(' FORCED', ` (${t('forced')})`)}`.trim()),
-      el('span', { class: 'track-bar' }, el('i', { style: `width:${pct}%` })),
-      el('span', { class: 'track-pct' }, `${pct}%`));
+    const canSkip = !x.s && pct < 100 && ['running', 'paused'].includes(j.state);
+    return el('div', { class: `track${pct >= 100 ? ' done' : ''}${x.s ? ' skipped' : ''}` },
+      el('span', { class: 'track-name' }, label(x)),
+      el('span', { class: 'track-bar' }, el('i', { style: `width:${x.s ? 0 : pct}%` })),
+      el('span', { class: 'track-pct' }, x.s ? t('skipped') : `${pct}%`),
+      canSkip
+        ? el('button', { class: 'link track-skip', title: t('skipTrack'), 'aria-label': t('skipTrack'), onclick: () => send({ type: 'skipTrack', jobId: j.id, index: i }) }, '✕')
+        : el('span', { class: 'track-skip' }));
   }));
 }
 

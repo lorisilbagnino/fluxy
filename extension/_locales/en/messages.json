@@ -398,6 +398,12 @@
   "remove": {
     "message": "remove"
   },
+  "skipTrack": {
+    "message": "Skip this track: stop it and leave it out of the file"
+  },
+  "skipped": {
+    "message": "skipped"
+  },
   "pause": {
     "message": "pause"
   },

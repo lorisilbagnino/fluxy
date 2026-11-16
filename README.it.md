@@ -132,6 +132,9 @@ Vedi le sezioni corrispondenti del [README inglese](README.md#debug). In breve: 
 - **Limite di velocità** (impostazioni, e selettore rapido ⏱ negli elenchi dei download): MB/s per tutti i download
   insieme. Motore nel browser: vale subito, anche sui download in corso; app locale: `--limit-rate` di yt-dlp,
   diviso tra i suoi download in corso, per quelli avviati dopo la modifica.
+- **Tracce in parallelo, salta una traccia**: video, ogni audio e ogni sottotitolo si scaricano insieme (app locale:
+  un processo yt-dlp/ffmpeg per traccia, con le connessioni divise fra loro). La ✕ sulla riga di una traccia la
+  interrompe e la lascia fuori dal file; il resto prosegue, e anche un riprova o riprendi successivo la salta.
 - **Rinomina durante il download** (✎): il nome serve solo al salvataggio, quindi si può cambiare fino ad allora
   (app locale: fino alla fine dell'unione).
 - Rimuovendo un download in pausa o fallito si cancellano anche i suoi dati temporanei.
