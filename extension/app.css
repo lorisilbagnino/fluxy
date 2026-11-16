@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-or-later — Fluxy downloads page */
+/* SPDX-License-Identifier: GPL-3.0-or-later — the Fluxy page (downloads, settings, about) */
 :root {
   --bg: #12151c; --surface: #1b2029; --surface-2: #232a35; --border: #2e3644;
   --text: #e8ebf1; --muted: #8b95a7; --accent: #ffb020; --accent-ink: #1a1200;
@@ -16,10 +16,26 @@
 [hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 header {
-  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 12px;
-  padding: 14px max(16px, calc((100vw - 900px) / 2)); background: var(--bg); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  padding: 12px max(16px, calc((100vw - 900px) / 2)); background: var(--bg); border-bottom: 1px solid var(--border);
 }
-header h1 { margin: 0; font-size: 19px; flex: 1; }
+.brand { display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 700; }
+nav { display: flex; gap: 4px; }
+nav a { color: var(--muted); text-decoration: none; padding: 6px 12px; border-radius: 8px; font-weight: 600; }
+nav a:hover { color: var(--text); background: var(--surface-2); }
+nav a.on { color: var(--text); background: var(--surface); box-shadow: inset 0 -2px 0 var(--accent); }
+.spacer { flex: 1; }
+.gh { color: var(--muted); text-decoration: none; font-size: 13px; }
+.gh:hover { color: var(--text); text-decoration: underline; }
+.toolbar { display: flex; align-items: baseline; gap: 12px; margin: 4px 0 14px; }
+.toolbar h2 { margin: 0; font-size: 17px; }
+.ghost.danger { background: var(--danger); color: #fff; border-color: transparent; }
+#settings-body { margin: 0; max-width: 640px; padding: 16px; }
+.about { max-width: 680px; display: grid; gap: 6px; }
+.about .lead { font-size: 15px; margin-top: 0; }
+.about h3 { margin: 14px 0 0; font-size: 14px; }
+.about p { margin: 4px 0; }
+.about .links { margin: 4px 0; padding-left: 18px; display: grid; gap: 4px; }
 main { max-width: 900px; margin: 0 auto; padding: 16px; }
 footer { max-width: 900px; margin: 0 auto; padding: 8px 16px 24px; }
 .muted { color: var(--muted); }

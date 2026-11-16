@@ -1,0 +1,28 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later — settings form, shared by popup.html and app.html */
+.panel { margin: 10px 14px 0; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); display: grid; gap: 10px; }
+.panel label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+.panel label.check { display: flex; gap: 8px; align-items: flex-start; color: var(--text); font-size: 13px; cursor: pointer; }
+.panel label.check input { margin-top: 3px; accent-color: var(--accent); }
+.panel label.check small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.field { display: grid; gap: 4px; }
+.field-title { color: var(--muted); font-size: 12px; }
+.panel label.choice { display: flex; gap: 8px; align-items: flex-start; color: var(--text); font-size: 13px; cursor: pointer; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; }
+.panel label.choice:has(input:checked) { border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.panel label.choice input { margin-top: 3px; accent-color: var(--accent); }
+.panel label.choice small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+.subpanel { display: grid; gap: 8px; padding: 10px; border-radius: 8px; background: var(--surface-2); }
+.native-status { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.native-status [data-s="native-text"] { flex: 1; min-width: 0; font-size: 12px; }
+.native-status [data-s="native-text"].ok { color: var(--ok); }
+.native-status [data-s="native-text"].bad { color: var(--danger); }
+.install-help { font-size: 12px; display: grid; gap: 6px; }
+.install-help code { display: block; padding: 6px 8px; background: var(--bg); border-radius: 6px; font-size: 11.5px; word-break: break-all; user-select: all; }
+.install-help .row-actions { display: flex; gap: 10px; }
+input[type=text], input[type=number], select {
+  width: 100%; font: inherit; color: var(--text); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 7px; padding: 6px 8px;
+}
+.panel label.choice small, .panel label.check small { display: block; }
+.panel-body { display: grid; gap: 10px; }

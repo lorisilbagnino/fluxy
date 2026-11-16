@@ -115,9 +115,14 @@ Vedi le sezioni corrispondenti del [README inglese](README.md#debug). In breve: 
 - **Riprova** (download falliti o annullati): riparte da quanto già scaricato. I link degli stream hanno spesso token a
   scadenza, quindi prima vengono rinnovati: da un rilevamento più recente della stessa pagina (dopo *Rileva*) o
   rianalizzando la playlist originale. L'app locale riprova anche da sola i sottotitoli, fino a 3 volte.
-- **Pagina dei download** (*apri ↗* nel popup): ogni download con qualità video, tracce audio, sottotitoli, motore,
-  pagina di origine, destinazione, ora di avvio e tentativi, con le stesse azioni. Nel popup c'è un riepilogo su una
-  riga (*1080p · audio IT, EN · sub IT*).
+- **La pagina di Fluxy** (⤢ in alto nel popup, sempre presente) ha tre schede: *Download* (ogni download con qualità
+  video, tracce audio, sottotitoli, motore, pagina di origine, destinazione, avvio, tentativi e le stesse azioni),
+  *Impostazioni* (lo stesso modulo del popup, sincronizzato) e *Informazioni* (GitHub, release, segnalazioni,
+  licenza, crediti, Ko-fi). Il popup mostra i download in corso, in pausa e falliti più gli ultimi completati, con un
+  riepilogo su una riga (*1080p · audio IT, EN · sub IT*).
+- **Cronologia persistente**: i download restano anche dopo il riavvio del browser; quelli rimasti a metà diventano
+  *interrotti* e si possono riprovare. *Cancella cronologia* (chiede conferma) o *rimuovi* il singolo download; i file
+  salvati non vengono mai toccati. La cronologia conserva gli ultimi 300 download conclusi.
 - **Rinomina durante il download** (✎): il nome serve solo al salvataggio, quindi si può cambiare fino ad allora
   (app locale: fino alla fine dell'unione).
 - Rimuovendo un download in pausa o fallito si cancellano anche i suoi dati temporanei.

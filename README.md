@@ -185,9 +185,14 @@ If you register the app from the repository with `./host/install.sh` and then mo
   often carry short-lived tokens, so the track URLs are renewed first: from a newer detection of the same page
   (after *Detect*) or by analysing the original playlist again. The local app also retries subtitles 3 times on
   its own.
-- **Downloads page** (*open ↗* in the popup): every job with video quality, each audio track, each subtitle,
-  engine, source page, destination, start time and retries, plus the same actions. The popup shows a one-line
-  summary (*1080p · audio IT, EN · sub IT*).
+- **The Fluxy page** (⤢ in the popup header, always there) has three tabs: *Downloads* (every job with video
+  quality, each audio track, each subtitle, engine, source page, destination, start time, retries and the same
+  actions), *Settings* (the same form as the popup, kept in sync) and *About* (GitHub, releases, issues, license,
+  credits, Ko-fi). The popup lists active, paused and failed downloads plus the latest finished ones, each with a
+  one-line summary (*1080p · audio IT, EN · sub IT*).
+- **Persistent history**: downloads are kept across browser restarts; one left running when the browser closed is
+  marked *interrupted* and can be retried. *Clear history* (asks twice) or *remove* a single entry; saved files are
+  never touched. The history keeps the latest 300 finished downloads.
 - **Rename while downloading** (✎): the name is used only when the file is saved, so it can change until then
   (local app: until the merge finishes).
 - Removing a paused or failed download deletes its staged data.

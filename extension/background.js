@@ -136,6 +136,7 @@ const ready = (async () => {
   autoDetect = { ...DEFAULT_SETTINGS, ...settings }.autoDetect;
   for (const id of stored || []) armed.add(id);
   loaded = true;
+  await markInterrupted();
   // Firefox: a new event page means the previous one (and its downloads) is gone.
   if (IS_FIREFOX) failRunningJobs(tx('errSuspended'), 'browser');
   refreshListening();
@@ -147,6 +148,24 @@ chrome.storage.onChanged.addListener((changes, area) => {
     refreshListening();
   }
 });
+
+/**
+ * First start in this browser session (storage.session is empty): downloads that were still running, saving
+ * or paused when the browser closed can't go on by themselves. They become errors that can be retried
+ * (the local app keeps its finished tracks; the browser engine starts again).
+ */
+async function markInterrupted() {
+  const { sessionStarted } = await chrome.storage.session.get('sessionStarted');
+  if (sessionStarted) return;
+  await chrome.storage.session.set({ sessionStarted: Date.now() });
+  await mutateJobs((jobs) => {
+    for (const j of Object.values(jobs)) {
+      if (['running', 'saving', 'paused'].includes(j.state)) {
+        Object.assign(j, { state: 'error', stage: tx('stageError'), error: tx('errInterrupted'), speed: null, eta: null, finishedAt: Date.now() });
+      }
+    }
+  });
+}
 
 async function setArmed(tabId, on) {
   await ready;
@@ -397,15 +416,21 @@ async function checkHost() {
 // ----------------------------------------------------------------- jobs ---
 let jobsLock = Promise.resolve();
 
+// Downloads are kept in storage.local: the history survives browser restarts (see markInterrupted).
+const HISTORY_MAX = 300;
 async function getJobs() {
-  return (await chrome.storage.session.get('jobs')).jobs || {};
+  return (await chrome.storage.local.get('jobs')).jobs || {};
 }
 
 function mutateJobs(fn) {
   jobsLock = jobsLock.then(async () => {
     const jobs = await getJobs();
     fn(jobs);
-    await chrome.storage.session.set({ jobs });
+    // keep the history bounded: drop the oldest finished entries
+    const finished = Object.values(jobs).filter((j) => ['done', 'error', 'cancelled'].includes(j.state))
+      .sort((a, b) => a.startedAt - b.startedAt);
+    for (const j of finished.slice(0, Math.max(0, finished.length - HISTORY_MAX))) delete jobs[j.id];
+    await chrome.storage.local.set({ jobs });
   }).catch((e) => console.error('[flux] jobs op failed', e));
   return jobsLock;
 }
@@ -974,12 +999,13 @@ async function renameJob(jobId, filename) {
   }
 }
 
-/** The downloads page: focus it if already open. */
-async function openManager() {
-  const url = chrome.runtime.getURL('downloads.html');
-  const [tab] = await chrome.tabs.query({ url });
+/** The Fluxy page (app.html#downloads|settings|about): focus it if already open. */
+async function openPage(page = 'downloads') {
+  const base = chrome.runtime.getURL('app.html');
+  const url = `${base}#${page}`;
+  const [tab] = await chrome.tabs.query({ url: `${base}*` });
   if (tab) {
-    await chrome.tabs.update(tab.id, { active: true });
+    await chrome.tabs.update(tab.id, { active: true, url });
     if (tab.windowId != null) chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
   } else await chrome.tabs.create({ url });
 }
@@ -1019,7 +1045,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
       case 'resume': await resumeJob(msg.jobId); return {};
       case 'retry': await retryJob(msg.jobId); return {};
       case 'renameJob': await renameJob(msg.jobId, msg.filename); return {};
-      case 'openManager': await openManager(); return {};
+      case 'openManager': await openPage('downloads'); return {};
+      case 'openPage': await openPage(msg.page); return {};
       case 'clearTab': await clearTab(msg.tabId); return {};
       case 'arm': await armTab(msg.tabId); return {};
       case 'disarm': await setArmed(msg.tabId, false); return {};

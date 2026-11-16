@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fluxy</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="settings.css">
+</head>
+<!-- The Fluxy page: downloads, settings, about. Tabs follow the URL hash (#downloads, #settings, #about).
+     Texts: data-i18n (text), data-i18n-title — keys in _locales/*/messages.json -->
+<body>
+  <header>
+    <div class="brand"><img src="icons/icon48.png" alt="" width="32" height="32"><span>Fluxy</span></div>
+    <nav role="tablist">
+      <a role="tab" href="#downloads" data-tab="downloads" data-i18n="tabDownloads"></a>
+      <a role="tab" href="#settings" data-tab="settings" data-i18n="tabSettings"></a>
+      <a role="tab" href="#about" data-tab="about" data-i18n="tabAbout"></a>
+    </nav>
+    <span class="spacer"></span>
+    <a class="gh" href="https://github.com/lorisilbagnino/fluxy" target="_blank" rel="noopener" data-i18n-title="githubTitle">GitHub ↗</a>
+    <a id="donate" class="donate" target="_blank" rel="noopener" hidden><img src="icons/kofi-cup.png" alt="Ko-fi"><span data-i18n="donate"></span></a>
+  </header>
+
+  <main>
+    <section id="tab-downloads" role="tabpanel">
+      <div class="toolbar">
+        <h2 data-i18n="tabDownloads"></h2>
+        <span id="counts" class="muted"></span>
+        <span class="spacer"></span>
+        <button id="btn-clear" class="ghost" data-i18n="clearHistory" data-i18n-title="clearHistoryTitle"></button>
+      </div>
+      <div id="list"></div>
+      <p id="empty" class="muted" data-i18n="noDownloads" hidden></p>
+    </section>
+
+    <section id="tab-settings" role="tabpanel" hidden>
+      <div class="toolbar"><h2 data-i18n="tabSettings"></h2></div>
+      <div id="settings-body" class="panel panel-body"></div>
+    </section>
+
+    <section id="tab-about" role="tabpanel" hidden>
+      <div class="toolbar"><h2 data-i18n="tabAbout"></h2></div>
+      <div class="about">
+        <p class="lead" data-i18n="aboutText"></p>
+        <ul class="links">
+          <li><a href="https://github.com/lorisilbagnino/fluxy" target="_blank" rel="noopener" data-i18n="aboutSource"></a></li>
+          <li><a href="https://github.com/lorisilbagnino/fluxy/releases" target="_blank" rel="noopener" data-i18n="aboutReleases"></a></li>
+          <li><a href="https://github.com/lorisilbagnino/fluxy/issues" target="_blank" rel="noopener" data-i18n="aboutIssues"></a></li>
+          <li><a href="https://github.com/lorisilbagnino/fluxy/blob/main/docs/PRIVACY.md" target="_blank" rel="noopener" data-i18n="aboutPrivacy"></a></li>
+        </ul>
+        <h3 data-i18n="aboutLicenseTitle"></h3>
+        <p><span data-i18n="aboutLicense"></span>
+          <a href="https://github.com/lorisilbagnino/fluxy/blob/main/LICENSE" target="_blank" rel="noopener">LICENSE</a> ·
+          <a href="https://github.com/lorisilbagnino/fluxy/blob/main/ADDITIONAL-TERMS.md" target="_blank" rel="noopener">ADDITIONAL-TERMS</a></p>
+        <h3 data-i18n="aboutThirdTitle"></h3>
+        <p><span data-i18n="aboutThird"></span>
+          <a href="https://github.com/lorisilbagnino/fluxy/blob/main/THIRD-PARTY-NOTICES.md" target="_blank" rel="noopener">THIRD-PARTY-NOTICES</a></p>
+        <p id="about-donate" hidden><span data-i18n="aboutDonate"></span></p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Appropriate Legal Notices (GPL-3.0 §5d, ADDITIONAL-TERMS.md term 1): keep in modified versions -->
+  <footer><a id="credits" href="https://github.com/lorisilbagnino/fluxy" target="_blank" rel="noopener"></a></footer>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

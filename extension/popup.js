@@ -2,6 +2,7 @@
 // Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
 import { DEFAULT_SETTINGS, childSet, isChild, isBlockedUrl, isPageSite } from './shared.js';
 import { DONATE_URL } from './build-flags.js';
+import { mountSettings } from './settings.js';
 import {
   t, UI_LANG, translate, $, send, el, langLabel, nameIsJustLang, prettyCodec, listFmt, channelsLabel,
   fmtBitrate, fmtDuration, fmtSize, renderJob, sortJobs, setRerender, restoreEditFocus,
@@ -67,23 +68,8 @@ function renderHost(host = hostState) {
   const native = settings.engine === 'native';
   const pill = $('#host-status');
   const warn = $('#host-warning');
-  const txt = $('#native-text');
   warn.hidden = true;
   warn.classList.remove('soft');
-
-  // settings panel: status of the local app, whichever engine is selected
-  txt.className = '';
-  if (!host) txt.textContent = t('appNotChecked');
-  else if (host.status === 'ok') {
-    const missing = [!host.ffmpeg && 'ffmpeg', !host.ytdlp && 'yt-dlp'].filter(Boolean);
-    txt.textContent = missing.length ? t('appMissingTools', listFmt(missing)) : t('appReady', host.version);
-    txt.className = missing.length ? 'bad' : 'ok';
-  } else {
-    txt.textContent = host.status === 'missing' ? t('appNotInstalled') : t('appCommError');
-    txt.className = 'bad';
-  }
-  txt.title = host?.status === 'ok' ? `${host.ffmpeg || `ffmpeg ${t('missing')}`}\nyt-dlp ${host.ytdlp || t('missing')}` : (host?.error || '');
-  $('#btn-install').hidden = host?.status === 'ok' && host.ffmpeg && host.ytdlp;
 
   if (!native) {
     pill.textContent = t('pillBrowser');
@@ -119,36 +105,15 @@ function renderHost(host = hostState) {
   );
 }
 
+let settingsForm = null;   // settings.js
+
 function openSettings(install = false) {
   $('#settings').hidden = false;
   send({ type: 'hostCheck' });
-  if (install) $('#btn-install').focus();
+  if (install) settingsForm?.focusInstall();
 }
 
-function useEngine(engine) {
-  settings.engine = engine;
-  for (const r of document.querySelectorAll('input[name=engine]')) r.checked = r.value === engine;
-  saveSettings();
-}
-
-async function installLocalApp() {
-  const help = $('#install-help');
-  const btn = $('#btn-install');
-  btn.disabled = true;
-  help.hidden = false;
-  help.replaceChildren(t('preparingInstaller'));
-  const r = await send({ type: 'installer' });
-  btn.disabled = false;
-  if (r?.error) { help.replaceChildren(el('span', { class: 'err' }, r.error)); return; }
-  const cmd = `bash '${r.path.replace(/'/g, `'\\''`)}'`;
-  const copy = el('button', { class: 'link', onclick: async () => { await navigator.clipboard.writeText(cmd); copy.textContent = t('copied'); } }, t('copyCommand'));
-  help.replaceChildren(
-    el('span', {}, t('installerSaved')),
-    el('code', {}, cmd),
-    el('span', { class: 'muted' }, t('installerExplain')),
-    el('div', { class: 'row-actions' }, copy, el('button', { class: 'link', onclick: () => send({ type: 'hostCheck' }) }, t('doneVerify'))),
-  );
-}
+function useEngine(engine) { settingsForm?.set({ engine }); }
 
 function renderDetect() {
   const isArmed = armedTabs.includes(tabId);
@@ -415,47 +380,14 @@ function renderJobs(jobs) {
   const list = sortJobs(jobs);
   $('#jobs-head').hidden = list.length === 0;
   $('#btn-clear-jobs').hidden = !list.some((j) => ['done', 'error', 'cancelled'].includes(j.state));
-  $('#jobs').replaceChildren(...list.map((j) => renderJob(j)));
+  // the popup keeps it short: active, paused and failed downloads plus the latest finished ones
+  const shown = list.filter((j, i) => !['done', 'cancelled'].includes(j.state) || i < 3).slice(0, 8);
+  $('#btn-manager').hidden = shown.length === list.length;
+  $('#btn-manager').textContent = t('showAll', list.length);
+  $('#jobs').replaceChildren(...shown.map((j) => renderJob(j)));
   restoreEditFocus($('#jobs'));
 }
 setRerender(() => renderJobs(lastJobs));
-
-// -------------------------------------------------------------- settings ---
-function saveSettings() {
-  settings = {
-    engine: document.querySelector('input[name=engine]:checked')?.value || 'browser',
-    outputDir: $('#set-dir').value.trim() || DEFAULT_SETTINGS.outputDir,
-    container: $('#set-container').value,
-    fragments: Math.min(32, Math.max(1, parseInt($('#set-fragments').value, 10) || 8)),
-    langs: $('#set-langs').value,
-    autoDetect: $('#set-auto').checked,
-  };
-  chrome.storage.local.set({ settings });
-  $('#dir-field').hidden = settings.engine !== 'native';
-  if (settings.engine === 'native') send({ type: 'hostCheck' });
-  renderHost();
-  renderDetect();
-  renderStreams(lastStreams, true);
-}
-
-function bindSettings() {
-  for (const r of document.querySelectorAll('input[name=engine]')) {
-    r.checked = r.value === settings.engine;
-    r.addEventListener('change', saveSettings);
-  }
-  $('#dir-field').hidden = settings.engine !== 'native';
-  $('#set-dir').value = settings.outputDir;
-  $('#set-container').value = settings.container;
-  $('#set-fragments').value = settings.fragments;
-  $('#set-langs').value = settings.langs;
-  $('#set-auto').checked = !!settings.autoDetect;
-  for (const id of ['#set-dir', '#set-container', '#set-fragments', '#set-langs', '#set-auto']) $(id).addEventListener('change', saveSettings);
-  $('#btn-settings').addEventListener('click', () => {
-    if ($('#settings').hidden) openSettings(); else $('#settings').hidden = true;
-  });
-  $('#btn-install').addEventListener('click', installLocalApp);
-  $('#btn-verify').addEventListener('click', () => send({ type: 'hostCheck' }));
-}
 
 // ------------------------------------------------------------------ init ---
 async function init() {
@@ -473,21 +405,28 @@ async function init() {
   if (DONATE_URL) { $('#donate').href = DONATE_URL; $('#donate').hidden = false; }
   $('#credits').textContent = t('credits', `v${chrome.runtime.getManifest().version}`);
   $('#credits').title = 'Based on Fluxy by lorisilbagnino — https://github.com/lorisilbagnino/fluxy';
-  bindSettings();
+  settingsForm = await mountSettings($('#settings-body'), {
+    onChange: (next) => { settings = next; renderHost(); renderDetect(); renderStreams(lastStreams, true); },
+  });
+  $('#btn-settings').addEventListener('click', () => {
+    if ($('#settings').hidden) openSettings(); else $('#settings').hidden = true;
+  });
+  $('#btn-open-page').addEventListener('click', async () => { await send({ type: 'openPage', page: 'downloads' }); window.close(); });
 
   const key = `tab:${tabId}`;
-  const data = await chrome.storage.session.get([key, 'jobs', 'host', 'armed']);
+  const data = await chrome.storage.session.get([key, 'host', 'armed']);
+  const { jobs } = await chrome.storage.local.get('jobs');
   armedTabs = data.armed || [];
   renderDetect();
   renderHost(data.host);
   lastScan = data[key]?.scan || null;
   renderStreams(data[key]?.streams || []);
-  renderJobs(data.jobs);
+  renderJobs(jobs);
 
   chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.jobs) renderJobs(changes.jobs.newValue);
     if (area !== 'session') return;
     if (changes[key]) { lastScan = changes[key].newValue?.scan || null; renderStreams(changes[key].newValue?.streams || []); }
-    if (changes.jobs) renderJobs(changes.jobs.newValue);
     if (changes.host) renderHost(changes.host.newValue);
     if (changes.armed) {
       armedTabs = changes.armed.newValue || [];
@@ -506,7 +445,7 @@ async function init() {
   });
   $('#btn-stop').addEventListener('click', () => send({ type: 'disarm', tabId }));
   $('#btn-clear-jobs').addEventListener('click', () => send({ type: 'clearFinished' }));
-  $('#btn-manager').addEventListener('click', async () => { await send({ type: 'openManager' }); window.close(); });
+  $('#btn-manager').addEventListener('click', async () => { await send({ type: 'openPage', page: 'downloads' }); window.close(); });
   // Videos in the page itself (no playback needed): scanned every time the popup opens.
   send({ type: 'scan', tabId });
   // The local app is only started when it is the chosen engine (or the settings are opened).

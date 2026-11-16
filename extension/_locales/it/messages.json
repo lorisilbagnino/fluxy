@@ -56,6 +56,71 @@
   "clearFinished": {
     "message": "rimuovi completati"
   },
+  "clearHistory": {
+    "message": "Cancella cronologia"
+  },
+  "clearHistoryTitle": {
+    "message": "Toglie dall'elenco i download completati, falliti e annullati (i file salvati restano)"
+  },
+  "clearHistoryConfirm": {
+    "message": "Sicuro? Clicca di nuovo"
+  },
+  "showAll": {
+    "message": "tutti ($p1$) ↗",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "openPage": {
+    "message": "Apri la pagina di Fluxy: download, impostazioni, informazioni"
+  },
+  "githubTitle": {
+    "message": "Fluxy su GitHub: codice, release, segnalazioni"
+  },
+  "tabDownloads": {
+    "message": "Download"
+  },
+  "tabSettings": {
+    "message": "Impostazioni"
+  },
+  "tabAbout": {
+    "message": "Informazioni"
+  },
+  "aboutText": {
+    "message": "Fluxy salva gli stream HLS/DASH e i video di una pagina in un unico MKV/MP4, con le tracce audio e i sottotitoli che scegli, senza ricodifica."
+  },
+  "aboutSource": {
+    "message": "Codice sorgente su GitHub"
+  },
+  "aboutReleases": {
+    "message": "Release e novità"
+  },
+  "aboutIssues": {
+    "message": "Segnala un problema o proponi una funzione"
+  },
+  "aboutPrivacy": {
+    "message": "Informativa sulla privacy"
+  },
+  "aboutLicenseTitle": {
+    "message": "Licenza"
+  },
+  "aboutLicense": {
+    "message": "Software libero: GNU GPL v3.0 o successiva, con termini aggiuntivi (attribuzione, nome e logo)."
+  },
+  "aboutThirdTitle": {
+    "message": "Software di terze parti"
+  },
+  "aboutThird": {
+    "message": "Realizzato con Mediabunny (MPL-2.0); l'app locale facoltativa usa FFmpeg e yt-dlp."
+  },
+  "aboutDonate": {
+    "message": "Fluxy è gratuito. Se ti è utile, puoi sostenerlo su Ko-fi:"
+  },
+  "errInterrupted": {
+    "message": "Interrotto alla chiusura del browser: riprova per continuare"
+  },
   "streamsInTab": {
     "message": "Video in questa pagina"
   },
