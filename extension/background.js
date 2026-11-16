@@ -433,6 +433,12 @@ function mutateJobs(fn) {
   jobsLock = jobsLock.then(async () => {
     const jobs = await getJobs();
     fn(jobs);
+    // a finished download can't be retried: don't keep the page's cookies/headers in the history
+    for (const j of Object.values(jobs)) {
+      if (j.state !== 'done') continue;
+      delete j.headers;
+      if (j.spec?.headers) delete j.spec.headers;
+    }
     // keep the history bounded: drop the oldest finished entries
     const finished = Object.values(jobs).filter((j) => ['done', 'error', 'cancelled'].includes(j.state))
       .sort((a, b) => a.startedAt - b.startedAt);

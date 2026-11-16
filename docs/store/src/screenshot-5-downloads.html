@@ -1,0 +1,23 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<style>
+  .wrap { display: grid; grid-template-columns: 1fr 660px; gap: 48px; padding: 56px 56px 56px 72px; height: 100%; }
+  .copy { display: flex; flex-direction: column; gap: 22px; padding-top: 12px; }
+  h1 { font-size: 46px; }
+  .facts { display: grid; gap: 15px; margin-top: 4px; }
+  .fact { display: flex; gap: 14px; align-items: flex-start; font-size: 17.5px; line-height: 1.45; color: #cfd5e0; }
+  .fact b { color: var(--text); } .fact i { flex: none; width: 32px; height: 32px; border-radius: 10px; background: #ffb02022; color: var(--accent); display: grid; place-items: center; font-style: normal; font-weight: 800; }
+  .popup { align-self: center; width: 660px; }
+</style></head><body>
+<div class="wrap">
+  <div class="copy">
+    <div class="brand"><img src="assets/icon.svg">Fluxy</div>
+    <h1 data-t="s5_h1"></h1>
+    <div class="facts">
+      <div class="fact"><i>⇉</i><div data-t="s5_f1"></div></div>
+      <div class="fact"><i>✕</i><div data-t="s5_f2"></div></div>
+      <div class="fact"><i>↻</i><div data-t="s5_f3"></div></div>
+      <div class="fact"><i>⏱</i><div data-t="s5_f4"></div></div>
+    </div>
+  </div>
+  <div class="popup shadow"><img data-img="assets/app-downloads-{lang}.png"></div>
+</div><script src="strings.js"></script></body></html>

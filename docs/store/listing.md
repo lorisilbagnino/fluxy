@@ -11,12 +11,13 @@ Pacchetti da caricare (`./build.py`, oppure dalla release GitHub; il link Ko-fi 
 | Chrome Web Store, Edge Add-ons | `dist/fluxy-<ver>-chrome-store.zip` (senza `key`: l'ID lo assegna lo store; senza YouTube) |
 | AMO | `dist/fluxy-<ver>-firefox-store.xpi` (senza YouTube) |
 
-**Non menzionare il supporto YouTube della versione GitHub** in schede, screenshot o note: per il Chrome Web Store
-indicare dove ottenere una funzione vietata equivale a offrirla (rischio di rifiuto o rimozione). Nella scheda c'è
-solo il link neutro al progetto; la differenza tra le versioni è spiegata nel README.
-
-Le versioni store escludono YouTube (obbligatorio per il Chrome Web Store, prudente per AMO); la versione pubblicata
-su GitHub lo supporta tramite l'app locale.
+**YouTube e altre piattaforme**: le versioni store escludono YouTube (obbligatorio per il Chrome Web Store, prudente
+per AMO); la versione su GitHub lo supporta tramite l'app locale. Nelle schede la versione GitHub si cita così:
+- **Chrome Web Store / Edge**: senza nominare YouTube, solo "più piattaforme video con l'app locale nella versione su
+  GitHub". Le policy CWS vietano di scaricare da YouTube e i revisori trattano come violazione anche il rimando
+  esplicito a dove farlo: nominarlo (anche come "YT") rischia rifiuto o rimozione. Niente YouTube neanche in
+  screenshot e note per i revisori.
+- **AMO**: le policy Mozilla non vietano i downloader per YouTube, quindi la riga può nominarlo.
 
 **Lingue**: l'estensione è in inglese (predefinita) e italiano; nome e descrizione del manifest vengono presi da
 `_locales/`. In entrambi gli store scegliere **inglese come lingua predefinita** e aggiungere l'italiano, ognuno con
@@ -51,9 +52,18 @@ cosa tenere e li ricompone in un unico file pronto per qualsiasi player.
 • Trova anche i video della pagina che non hai ancora avviato: file MP4/WebM, link, player incorporati.
 • Scegli la qualità del video, fino alla più alta che il sito offre.
 • Scegli le tracce audio per lingua: anche più di una nello stesso file.
-• Scegli i sottotitoli per lingua, compresi quelli "forced".
+• Scegli i sottotitoli per lingua, compresi quelli "forced", oppure scaricali come file .srt separati.
 • Ottieni un MKV (consigliato) o un MP4, con lingue e tracce predefinite già impostate.
 • Nessuna ricodifica: i dati vengono copiati così come sono, senza perdita di qualità e in pochi secondi.
+
+Un vero download manager
+• Video, audio e sottotitoli si scaricano in parallelo, con il numero di connessioni che scegli.
+• Hai cambiato idea su una lingua? Salta la singola traccia mentre scarica: resta fuori dal file, il resto continua.
+• Pausa e ripresa senza perdere quanto già scaricato; "riprova" rinnova il link scaduto e riparte da dove si era
+  fermato.
+• Coda con download contemporanei a scelta, limite di velocità, rinomina durante il download.
+• Pagina di Fluxy con tutti i download, la cronologia e le impostazioni; avanzamento di ogni traccia e MB
+  scaricati.
 
 Tutto nel browser
 Download in parallelo, decifratura dei flussi AES-128 standard e unione delle tracce avvengono dentro
@@ -70,16 +80,21 @@ ricaricata per intercettare gli stream del player. Se preferisci, puoi attivare 
 
 Cosa Fluxy non fa
 • Non scarica contenuti protetti da DRM (Widevine, PlayReady, FairPlay): li riconosce e lo segnala.
-• Non funziona su YouTube.
 • Non ricodifica e non modifica i contenuti.
+• Non raccoglie dati: niente account, statistiche o server di Fluxy.
 
 Usa Fluxy solo per contenuti che hai il diritto di salvare.
 
 Open source (GPL-3.0): codice, documentazione e release su https://github.com/lorisilbagnino/fluxy
+{GH_IT}
 Realizzato con Mediabunny; l'app locale facoltativa usa FFmpeg e yt-dlp.
 
 Fluxy è gratuito. Se ti è utile, puoi offrirmi un caffè: https://ko-fi.com/lorisilbagnino
 ```
+
+Riga sulla versione GitHub (al posto di `{GH_IT}`):
+- **Chrome Web Store / Edge**: `Più piattaforme video con l'app locale: vedi la versione su GitHub.`
+- **AMO**: `Altre piattaforme video, YouTube compreso, con l'app locale: vedi la versione su GitHub.`
 
 ---
 
@@ -102,9 +117,18 @@ puts them back together into a single file that plays anywhere.
 • Also finds the page's videos you haven't started yet: MP4/WebM files, links, embedded players.
 • Pick the video quality, up to the highest the site offers.
 • Pick audio tracks by language, several in the same file if you like.
-• Pick subtitles by language, including "forced" ones.
+• Pick subtitles by language, including "forced" ones, or save them as separate .srt files.
 • Get an MKV (recommended) or an MP4, with languages and default tracks already set.
 • No re-encoding: data is copied as is, with no quality loss and in seconds.
+
+A real download manager
+• Video, audio and subtitles download in parallel, over as many connections as you choose.
+• Changed your mind about a language? Skip that single track while it downloads: it stays out of the file and the
+  rest carries on.
+• Pause and resume without losing what's already downloaded; "retry" refreshes an expired link and picks up where
+  it stopped.
+• Queue with as many concurrent downloads as you like, speed limit, rename while downloading.
+• A Fluxy page with every download, the history and the settings; progress of each track and MB downloaded.
 
 All in the browser
 Parallel downloads, decryption of standard AES-128 streams and track merging all happen inside the extension.
@@ -121,16 +145,21 @@ the player's streams can be picked up. Automatic detection can be turned on in t
 
 What Fluxy doesn't do
 • It doesn't download DRM-protected content (Widevine, PlayReady, FairPlay): it recognises it and says so.
-• It doesn't work on YouTube.
 • It doesn't re-encode or alter content.
+• It doesn't collect data: no account, no analytics, no Fluxy servers.
 
 Only use Fluxy for content you have the right to save.
 
 Open source (GPL-3.0): code, documentation and releases at https://github.com/lorisilbagnino/fluxy
+{GH_EN}
 Built with Mediabunny; the optional local app uses FFmpeg and yt-dlp.
 
 Fluxy is free. If you find it useful, you can buy me a coffee: https://ko-fi.com/lorisilbagnino
 ```
+
+Line about the GitHub version (in place of `{GH_EN}`):
+- **Chrome Web Store / Edge**: `More video platforms with the local app: see the version on GitHub.`
+- **AMO**: `More video platforms, YouTube included, with the local app: see the version on GitHub.`
 
 ---
 
@@ -165,10 +194,10 @@ Fluxy is free. If you find it useful, you can buy me a coffee: https://ko-fi.com
   server del video) ma non vengono mai trasmessi allo sviluppatore né a terzi.
 - Certificazioni: non venduti a terzi · non usati per scopi estranei alla funzione · non usati per affidabilità
   creditizia.
-- URL informativa privacy: pubblicare `docs/PRIVACY.md` (vedi sotto) e incollarne l'indirizzo.
+- URL informativa privacy: https://github.com/lorisilbagnino/fluxy/blob/main/docs/PRIVACY.md
 
-**Requisiti di policy rispettati**: niente download da YouTube (bloccato nel codice), niente aggiramento di DRM,
-nessuna raccolta dati, permessi limitati alla funzione.
+**Requisiti di policy rispettati**: niente download da YouTube (bloccato nel codice) e nessun rimando esplicito a
+YouTube nella scheda, niente aggiramento di DRM, nessuna raccolta dati, permessi limitati alla funzione.
 
 ---
 
@@ -178,7 +207,7 @@ nessuna raccolta dati, permessi limitati alla funzione.
 **Contributions URL**: `https://ko-fi.com/lorisilbagnino` (Ko-fi è tra i servizi accettati)
 **Licenza**: GNU General Public License v3.0 (GPL-3.0-or-later, con termini aggiuntivi in `ADDITIONAL-TERMS.md`:
 su AMO scegliere "GNU General Public License v3.0"). Codice sorgente: https://github.com/lorisilbagnino/fluxy
-**Informativa privacy**: il testo di `docs/PRIVACY.md`.
+**Informativa privacy**: il testo di `docs/PRIVACY.md` (AMO lo vuole incollato, non come link).
 
 **Note per i revisori** (Notes to reviewer):
 
@@ -202,8 +231,6 @@ in a player page), open the popup, press "Detect", choose tracks, press "Downloa
 
 ## Immagini
 
-| File | Formato | Uso |
-|---|---|---|
 Ogni immagine esiste in `images/en/` e `images/it/`:
 
 | File | Formato | Uso |
@@ -212,21 +239,23 @@ Ogni immagine esiste in `images/en/` e `images/it/`:
 | `screenshot-2-three-streams.png` | 1280×800 | CWS/AMO: infografica "tre flussi, un file" |
 | `screenshot-3-how-it-works.png` | 1280×800 | CWS/AMO: come funziona in 3 passi |
 | `screenshot-4-engines.png` | 1280×800 | CWS/AMO: motore nel browser o app locale |
-| `screenshot-5-progress.png` | 1280×800 | CWS/AMO: download in corso e completato |
+| `screenshot-5-downloads.png` | 1280×800 | CWS/AMO: pagina dei download (tracce in parallelo, traccia saltata, pausa) |
 | `promo-small-440x280.png` | 440×280 | CWS: piccolo riquadro promozionale (obbligatorio) |
 | `promo-marquee-1400x560.png` | 1400×560 | CWS: riquadro grande (facoltativo) |
 | `social-preview-1280x640.png` | 1280×640 | GitHub: anteprima dei link (Settings → Social preview) |
 | `icons/icon128.png` (nell'estensione) | 128×128 | Icona dello store |
 
 I sorgenti HTML sono in `docs/store/src/` (testi in `src/strings.js`); si rigenerano con `node docs/store/render.mjs`.
+Le catture del popup e della pagina (`src/assets/popup-*.png`, `app-downloads-*.png`) vengono dall'estensione vera,
+aperta con dati dimostrativi.
 
 ---
 
 ## Prima di pubblicare
 
 - [ ] Account sviluppatore: Chrome Web Store (5 $ una tantum), AMO (gratis), Edge (gratis).
-- [ ] Informativa privacy raggiungibile da un URL pubblico (il repository è privato: GitHub Pages su repo privati
-      richiede un piano a pagamento; in alternativa un gist pubblico o una pagina sul proprio sito).
+- [x] Informativa privacy raggiungibile da un URL pubblico:
+      https://github.com/lorisilbagnino/fluxy/blob/main/docs/PRIVACY.md
 - [x] Licenza del progetto: GPL-3.0-or-later + termini aggiuntivi.
 - [x] Account Ko-fi: https://ko-fi.com/lorisilbagnino (link nel popup, nelle schede e nel pulsante Sponsor di GitHub).
 - [ ] Caricare `fluxy-<ver>-chrome-store.zip` / `fluxy-<ver>-firefox-store.xpi`, testi, immagini, giustificazioni.
