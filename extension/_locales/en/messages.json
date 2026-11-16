@@ -39,7 +39,41 @@
     "message": "Default format"
   },
   "parallel": {
-    "message": "Parallel connections"
+    "message": "Connections per download"
+  },
+  "maxJobs": {
+    "message": "Concurrent downloads"
+  },
+  "speedLimit": {
+    "message": "Speed limit (MB/s, 0 = none)"
+  },
+  "speedLimitHelp": {
+    "message": "For all downloads together. In-browser engine: applies at once, also to running downloads; local app: to the downloads started after the change."
+  },
+  "speedLimitTitle": {
+    "message": "Speed limit for all downloads"
+  },
+  "noLimit": {
+    "message": "No limit"
+  },
+  "connsTitle": {
+    "message": "$p1$ of $p2$ connections active",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "connsMaxTitle": {
+    "message": "Up to $p1$ connections (local app)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
   },
   "autoDetect": {
     "message": "Automatic detection on all tabs"
@@ -55,6 +89,71 @@
   },
   "clearFinished": {
     "message": "clear finished"
+  },
+  "clearHistory": {
+    "message": "Clear history"
+  },
+  "clearHistoryTitle": {
+    "message": "Removes finished, failed and cancelled downloads from the list (the saved files stay)"
+  },
+  "clearHistoryConfirm": {
+    "message": "Sure? Click again"
+  },
+  "showAll": {
+    "message": "all ($p1$) ↗",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "openPage": {
+    "message": "Open the Fluxy page: downloads, settings, info"
+  },
+  "githubTitle": {
+    "message": "Fluxy on GitHub: code, releases, issues"
+  },
+  "tabDownloads": {
+    "message": "Downloads"
+  },
+  "tabSettings": {
+    "message": "Settings"
+  },
+  "tabAbout": {
+    "message": "About"
+  },
+  "aboutText": {
+    "message": "Fluxy saves the HLS/DASH streams and the videos of a page as one MKV/MP4, with the audio tracks and subtitles you pick, without re-encoding."
+  },
+  "aboutSource": {
+    "message": "Source code on GitHub"
+  },
+  "aboutReleases": {
+    "message": "Releases and changes"
+  },
+  "aboutIssues": {
+    "message": "Report a problem or suggest a feature"
+  },
+  "aboutPrivacy": {
+    "message": "Privacy policy"
+  },
+  "aboutLicenseTitle": {
+    "message": "License"
+  },
+  "aboutLicense": {
+    "message": "Free software: GNU GPL v3.0 or later, with additional terms (attribution, name and logo)."
+  },
+  "aboutThirdTitle": {
+    "message": "Third-party software"
+  },
+  "aboutThird": {
+    "message": "Built with Mediabunny (MPL-2.0); the optional local app uses FFmpeg and yt-dlp."
+  },
+  "aboutDonate": {
+    "message": "Fluxy is free. If it's useful to you, you can support it on Ko-fi:"
+  },
+  "errInterrupted": {
+    "message": "Interrupted when the browser was closed: retry to continue"
   },
   "streamsInTab": {
     "message": "Videos on this page"
@@ -117,7 +216,16 @@
     "message": "copied ✓"
   },
   "donate": {
-    "message": "Support Fluxy ♥"
+    "message": "Support Fluxy on Ko-fi"
+  },
+  "rename": {
+    "message": "Rename the file"
+  },
+  "renameSave": {
+    "message": "Save the name (Enter)"
+  },
+  "renameCancel": {
+    "message": "Cancel (Esc)"
   },
   "credits": {
     "message": "Fluxy $p1$ — by lorisilbagnino · GPL-3.0 license",
@@ -290,6 +398,96 @@
   "remove": {
     "message": "remove"
   },
+  "pause": {
+    "message": "pause"
+  },
+  "resume": {
+    "message": "resume"
+  },
+  "retryJob": {
+    "message": "retry"
+  },
+  "openManager": {
+    "message": "open ↗"
+  },
+  "openManagerTitle": {
+    "message": "Open the downloads page"
+  },
+  "managerTitle": {
+    "message": "Fluxy — Downloads"
+  },
+  "managerCounts": {
+    "message": "$p1$ active · $p2$ total",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "overall": {
+    "message": "$p1$ running · $p2$ queued · $p3$ paused",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      },
+      "p3": {
+        "content": "$3"
+      }
+    }
+  },
+  "overallTitle": {
+    "message": "All active downloads"
+  },
+  "noDownloads": {
+    "message": "No downloads yet."
+  },
+  "audioShort": {
+    "message": "audio"
+  },
+  "subShort": {
+    "message": "sub"
+  },
+  "dVideo": {
+    "message": "Video"
+  },
+  "dAudio": {
+    "message": "Audio"
+  },
+  "dSubs": {
+    "message": "Subtitles"
+  },
+  "dEngine": {
+    "message": "Engine"
+  },
+  "dSource": {
+    "message": "Page"
+  },
+  "dSavedTo": {
+    "message": "Saved to"
+  },
+  "dStarted": {
+    "message": "Started"
+  },
+  "dRetries1": {
+    "message": "1 retry"
+  },
+  "dRetries": {
+    "message": "$p1$ retries",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "hint403": {
+    "message": "The server refused the request: the link may have expired. Retry renews it; if that's not enough, reopen the page, press Detect and retry."
+  },
   "error": {
     "message": "Error"
   },
@@ -303,6 +501,9 @@
     "message": "Analyse with yt-dlp"
   },
   "stageQueued": {
+    "message": "Starting"
+  },
+  "stageWaiting": {
     "message": "Queued"
   },
   "stageDone": {
@@ -462,6 +663,9 @@
   },
   "eng_stageSaving": {
     "message": "Saving"
+  },
+  "eng_stagePaused": {
+    "message": "Paused"
   },
   "eng_badRange": {
     "message": "The server doesn't honour partial downloads: try again"

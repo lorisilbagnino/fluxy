@@ -10,7 +10,7 @@ import {
   EncodedVideoPacketSource, EncodedAudioPacketSource, TextSubtitleSource,
   MkvOutputFormat, Mp4OutputFormat,
 } from './mediabunny.min.mjs';
-import { fetchBytes, fetchText, CancelledError } from './net.js';
+import { fetchBytes, fetchText, CancelledError, throttle } from './net.js';
 import { parseMediaPlaylist } from './hls.js';
 import { m } from './i18n.js';
 
@@ -93,21 +93,25 @@ function sniff(u8) {
  * CHUNK-sized pieces in parallel and writes them in order; otherwise it streams the single response.
  */
 const CHUNK = 8 << 20;
-export async function downloadFile(url, { dir, name, fetchOpts, parallel = 6, size, ranges, onProgress, ensureHosts }) {
+export async function downloadFile(url, { dir, name, fetchOpts, parallel = 6, size, ranges, onProgress, ensureHosts, state = {} }) {
   const signal = fetchOpts?.signal;
   await ensureHosts?.([url]);
   const fh = await dir.getFileHandle(name, { create: true });
-  const w = await fh.createWritable();
-  let bytes = 0;
+  // resume only in chunked mode: a single streamed response starts over
+  const resume = ranges && size > CHUNK && (state.bytes || 0) > 0;
+  const w = await fh.createWritable({ keepExistingData: resume });
+  if (resume) { await w.truncate(state.bytes); await w.seek(state.bytes); } else Object.assign(state, { written: 0, bytes: 0 });
+  let bytes = state.bytes || 0;
   try {
     if (ranges && size > CHUNK) {
       const count = Math.ceil(size / CHUNK);
       const done = new Map();
-      let next = 0, written = 0, writing = Promise.resolve();
+      let written = state.written || 0, next = written, writing = Promise.resolve();
       const flush = () => (writing = writing.then(async () => {
         while (done.has(written)) {
           const d = done.get(written); done.delete(written);
           await w.write(d); bytes += d.length; written++;
+          Object.assign(state, { written, bytes });
           onProgress?.({ bytes, total: size });
         }
       }));
@@ -124,22 +128,30 @@ export async function downloadFile(url, { dir, name, fetchOpts, parallel = 6, si
           await flush();
         }
       };
-      await Promise.all(Array.from({ length: Math.min(parallel, count) }, worker));
+      await Promise.all(Array.from({ length: Math.min(parallel, count - next) }, worker));
       await writing;
     } else {
-      const r = await fetch(url, { credentials: 'include', ...fetchOpts });
+      const { pool, ...init } = fetchOpts || {};
+      const r = await fetch(url, { credentials: 'include', ...init });
       if (!r.ok) throw new Error(m('eng_http', `HTTP ${r.status}`, new URL(url).hostname));
       const total = size || parseInt(r.headers.get('content-length') || '', 10) || 0;
       const reader = r.body.getReader();
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        await w.write(value); bytes += value.length;
-        onProgress?.({ bytes, total });
+      if (pool) pool.active++;
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          await throttle(value.length, signal);
+          if (pool) pool.received += value.length;
+          await w.write(value); bytes += value.length;
+          onProgress?.({ bytes, total });
+        }
+      } finally {
+        if (pool) pool.active--;
       }
     }
   } catch (e) {
-    await w.abort().catch(() => {});
+    await w.close().catch(() => w.abort().catch(() => {}));   // keep the chunks written so far
     if (signal?.aborted || e.name === 'AbortError') throw new CancelledError();
     throw e;
   }
@@ -147,21 +159,33 @@ export async function downloadFile(url, { dir, name, fetchOpts, parallel = 6, si
   return fh.getFile();
 }
 
-export async function downloadTrack(url, { dir, name, fetchOpts, parallel = 8, onProgress, ensureHosts }) {
+/**
+ * `state` (kept by the caller between runs) makes the download resumable: {written, bytes, kind, startPts,
+ * mapDone, done, result}. OPFS commits a writable only on close(), so on pause/error the file is closed,
+ * keeping the segments written so far; the next run reopens it and continues from the first missing one.
+ */
+export async function downloadTrack(url, { dir, name, fetchOpts, parallel = 8, onProgress, ensureHosts, state = {} }) {
   const signal = fetchOpts?.signal;
+  const fh = await dir.getFileHandle(name, { create: true });
+  if (state.done) return { file: await fh.getFile(), ...state.result };
   await ensureHosts?.([url]);
   const segs = parseMediaPlaylist(await fetchText(url, fetchOpts), url);
   if (!segs.length) throw new Error(m('eng_emptyPlaylist'));
   await ensureHosts?.(segmentHosts(segs));
-  const fh = await dir.getFileHandle(name, { create: true });
-  const w = await fh.createWritable();
-  let kind = null, startPts = null, bytes = 0, written = 0, next = 0;
+  if ((state.written || 0) > segs.length) Object.assign(state, { written: 0, bytes: 0, kind: null, startPts: null, mapDone: false });
+  const resume = (state.bytes || 0) > 0;
+  const w = await fh.createWritable({ keepExistingData: resume });
+  if (resume) { await w.truncate(state.bytes); await w.seek(state.bytes); }
+  let kind = state.kind ?? null, startPts = state.startPts ?? null, bytes = state.bytes || 0, written = state.written || 0, next = written;
   const done = new Map();
   let writing = Promise.resolve();
+  const save = () => Object.assign(state, { written, bytes, kind, startPts });
+  if (resume) onProgress?.({ done: written, total: segs.length, bytes });
 
-  if (segs[0].map) {
+  if (segs[0].map && !state.mapDone) {
     const init = await fetchSegment({ ...segs[0], url: segs[0].map, key: null, range: segs[0].mapRange }, fetchOpts);
     await w.write(init); bytes += init.length; kind = 'mp4';
+    state.mapDone = true; save();
   }
   const flush = () => (writing = writing.then(async () => {
     while (done.has(written)) {
@@ -172,6 +196,7 @@ export async function downloadTrack(url, { dir, name, fetchOpts, parallel = 8, o
       }
       if (kind === null) kind = sniff(d);
       await w.write(d); bytes += d.length; written++;
+      save();
       onProgress?.({ done: written, total: segs.length, bytes });
     }
   }));
@@ -185,15 +210,19 @@ export async function downloadTrack(url, { dir, name, fetchOpts, parallel = 8, o
     }
   };
   try {
-    await Promise.all(Array.from({ length: Math.min(parallel, segs.length) }, worker));
+    await Promise.all(Array.from({ length: Math.max(0, Math.min(parallel, segs.length - next)) }, worker));
     await writing;
   } catch (e) {
-    await w.abort().catch(() => {});
+    // keep what is on disk (pause / retry continue from here)
+    await writing.catch(() => {});
+    await w.close().catch(() => w.abort().catch(() => {}));
     throw e;
   }
   await w.close();
   if (kind === null || kind === 'unknown') throw new Error(m('eng_unknownSegments', name));
-  return { file: await fh.getFile(), kind, startPts, duration: segs.reduce((a, s) => a + s.dur, 0), segments: segs.length };
+  state.result = { kind, startPts, duration: segs.reduce((a, s) => a + s.dur, 0), segments: segs.length };
+  state.done = true;
+  return { file: await fh.getFile(), ...state.result };
 }
 
 // ------------------------------------------------------------ subtitles ----

@@ -175,6 +175,37 @@ If you register the app from the repository with `./host/install.sh` and then mo
   extension checks the available space before starting.
 - Local app: the file is written to a temporary `.flux-<id>` folder inside the destination and moved at the end.
 
+## Downloads: pause, resume, retry
+
+- **Pause / resume**: in-browser engine, the fetches stop and the segments already written stay in OPFS; resume
+  continues from the first missing one (direct files: from the last 8 MB piece). Local app: the running tool (yt-dlp
+  or ffmpeg) is suspended (`SIGSTOP`) and resumed. Not available while saving.
+- **Retry** (failed or cancelled downloads): continues from what was already downloaded (in-browser: the OPFS data
+  kept after the error; local app: the `.flux-<id>` folder, with finished tracks marked `tN.done`). Stream links
+  often carry short-lived tokens, so the track URLs are renewed first: from a newer detection of the same page
+  (after *Detect*) or by analysing the original playlist again. The local app also retries subtitles 3 times on
+  its own.
+- **The Fluxy page** (⤢ in the popup header, always there) has three tabs: *Downloads* (every job with video
+  quality, each audio track, each subtitle, engine, source page, destination, start time, retries and the same
+  actions), *Settings* (the same form as the popup, kept in sync) and *About* (GitHub, releases, issues, license,
+  credits, Ko-fi). The popup lists active, paused and failed downloads plus the latest finished ones, each with a
+  one-line summary (*1080p · audio IT, EN · sub IT*).
+- **Persistent history**: downloads are kept across browser restarts; one left running when the browser closed is
+  marked *interrupted* and can be retried. *Clear history* (asks twice) or *remove* a single entry; saved files are
+  never touched. The history keeps the latest 300 finished downloads.
+- **Queue**: at most *Concurrent downloads* (settings, default 2) run at once; the others wait as *queued* and
+  start in order (also after *retry* and *resume*). Each download shows one thin bar per track (video, each audio,
+  each subtitle) under its own bar, and an overall bar sums up the active downloads.
+- **Progress details**: each download shows its connections (⇉ active/max in the browser engine; max for the local
+  app, yt-dlp doesn't report them), MB downloaded / total (*≈* while the total of a stream is estimated), speed, ETA;
+  the overall bar sums them up.
+- **Speed limit** (settings, and a quick ⏱ selector in the download lists): MB/s for all downloads together. In-browser
+  engine: a shared token bucket applied while data arrives, so changes take effect at once; local app: yt-dlp
+  `--limit-rate`, split among its running downloads, for the downloads started after the change.
+- **Rename while downloading** (✎): the name is used only when the file is saved, so it can change until then
+  (local app: until the merge finishes).
+- Removing a paused or failed download deletes its staged data.
+
 ## Debug
 
 - Analysis from a terminal: `./host/fluxy_host.py probe "<url.m3u8>" "Referer: https://…"`

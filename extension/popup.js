@@ -2,20 +2,11 @@
 // Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
 import { DEFAULT_SETTINGS, childSet, isChild, isBlockedUrl, isPageSite } from './shared.js';
 import { DONATE_URL } from './build-flags.js';
-
-const t = (key, ...subs) => chrome.i18n.getMessage(key, subs.map(String)) || key;
-const UI_LANG = chrome.i18n.getUILanguage();
-
-/** Fills data-i18n / data-i18n-title / data-i18n-aria attributes under root. */
-function translate(root = document) {
-  for (const n of root.querySelectorAll('[data-i18n]')) n.textContent = t(n.dataset.i18n);
-  for (const n of root.querySelectorAll('[data-i18n-title]')) n.title = t(n.dataset.i18nTitle);
-  for (const n of root.querySelectorAll('[data-i18n-aria]')) n.setAttribute('aria-label', t(n.dataset.i18nAria));
-}
-
-
-const $ = (sel, root = document) => root.querySelector(sel);
-const send = (msg) => chrome.runtime.sendMessage(msg);
+import { mountSettings } from './settings.js';
+import {
+  t, UI_LANG, translate, $, send, el, langLabel, nameIsJustLang, prettyCodec, listFmt, channelsLabel,
+  fmtBitrate, fmtDuration, fmtSize, renderJob, sortJobs, setRerender, restoreEditFocus, renderOverall, speedLimitControl,
+} from './ui.js';
 
 let tabId = null;
 let tabTitle = '';
@@ -26,93 +17,6 @@ let lastStreamsSig = '';
 let armedTabs = [];
 let lastStreams = [];
 let lastScan = null;       // {blobVideos, drmVideos} from the page scan
-
-// ------------------------------------------------------------ formatting ---
-const langNames = (() => {
-  try { return new Intl.DisplayNames([UI_LANG], { type: 'language' }); } catch { return null; }
-})();
-
-const langNamesEn = (() => {
-  try { return new Intl.DisplayNames(['en'], { type: 'language' }); } catch { return null; }
-})();
-
-/** true when a track NAME just repeats its language ("English", "Italiano", "ita"...). */
-function nameIsJustLang(name, code) {
-  if (!name) return true;
-  const n = name.trim().toLowerCase();
-  if (code && n === code.toLowerCase()) return true;
-  const cands = [];
-  try { cands.push(langNames?.of(code), langNamesEn?.of(code)); } catch {}
-  try { cands.push(new Intl.DisplayNames([code], { type: 'language' }).of(code)); } catch {}
-  return cands.filter(Boolean).some((c) => c.toLowerCase() === n);
-}
-
-function langLabel(code) {
-  if (!code) return t('langUnknown');
-  try {
-    const n = langNames?.of(code);
-    if (n && n.toLowerCase() !== code.toLowerCase()) return n.charAt(0).toUpperCase() + n.slice(1);
-  } catch {}
-  return code;
-}
-
-function prettyCodec(c) {
-  if (!c) return '';
-  const lc = c.toLowerCase();
-  const table = [
-    ['avc', 'H.264'], ['h264', 'H.264'], ['hvc1', 'HEVC'], ['hev1', 'HEVC'], ['hevc', 'HEVC'], ['dvh', 'Dolby Vision'],
-    ['av01', 'AV1'], ['av1', 'AV1'], ['vp09', 'VP9'], ['vp9', 'VP9'],
-    ['mp4a.40.5', 'HE-AAC'], ['mp4a.40.29', 'HE-AACv2'], ['mp4a', 'AAC'], ['aac', 'AAC'],
-    ['ac-3', 'AC3'], ['ac3', 'AC3'], ['ec-3', 'E-AC3'], ['eac3', 'E-AC3'], ['opus', 'Opus'], ['flac', 'FLAC'], ['mp3', 'MP3'],
-  ];
-  for (const [p, n] of table) if (lc.startsWith(p)) return n;
-  return c;
-}
-
-const listFmt = (items) => {
-  try { return new Intl.ListFormat(UI_LANG, { type: 'conjunction' }).format(items); } catch { return items.join(', '); }
-};
-
-function channelsLabel(ch) {
-  const n = parseInt(ch, 10);
-  return { 1: 'mono', 2: '2.0', 6: '5.1', 8: '7.1' }[n] || (n ? `${n} ch` : '');
-}
-
-function fmtBitrate(bps) {
-  if (!bps) return '';
-  return bps >= 1e6 ? `${(bps / 1e6).toFixed(1)} Mbps` : `${Math.round(bps / 1e3)} kbps`;
-}
-
-function fmtDuration(sec) {
-  if (!sec) return '';
-  sec = Math.round(sec);
-  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
-  return h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m ${String(s).padStart(2, '0')}s`;
-}
-
-function fmtSpeed(bps) {
-  if (!bps) return '';
-  return bps > 1048576 ? `${(bps / 1048576).toFixed(1)} MB/s` : `${Math.round(bps / 1024)} KB/s`;
-}
-
-function fmtEta(s) {
-  if (s == null || !isFinite(s)) return '';
-  s = Math.round(s);
-  return s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-
-function el(tag, attrs = {}, ...children) {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v == null || v === false) continue;
-    if (k === 'class') e.className = v;
-    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
-    else if (k in e && typeof v !== 'string') e[k] = v;
-    else e.setAttribute(k, v === true ? '' : v);
-  }
-  for (const c of children.flat()) if (c != null && c !== false) e.append(c.nodeType ? c : String(c));
-  return e;
-}
 
 // ------------------------------------------------------------- defaults ---
 function preferredLangs() {
@@ -164,23 +68,8 @@ function renderHost(host = hostState) {
   const native = settings.engine === 'native';
   const pill = $('#host-status');
   const warn = $('#host-warning');
-  const txt = $('#native-text');
   warn.hidden = true;
   warn.classList.remove('soft');
-
-  // settings panel: status of the local app, whichever engine is selected
-  txt.className = '';
-  if (!host) txt.textContent = t('appNotChecked');
-  else if (host.status === 'ok') {
-    const missing = [!host.ffmpeg && 'ffmpeg', !host.ytdlp && 'yt-dlp'].filter(Boolean);
-    txt.textContent = missing.length ? t('appMissingTools', listFmt(missing)) : t('appReady', host.version);
-    txt.className = missing.length ? 'bad' : 'ok';
-  } else {
-    txt.textContent = host.status === 'missing' ? t('appNotInstalled') : t('appCommError');
-    txt.className = 'bad';
-  }
-  txt.title = host?.status === 'ok' ? `${host.ffmpeg || `ffmpeg ${t('missing')}`}\nyt-dlp ${host.ytdlp || t('missing')}` : (host?.error || '');
-  $('#btn-install').hidden = host?.status === 'ok' && host.ffmpeg && host.ytdlp;
 
   if (!native) {
     pill.textContent = t('pillBrowser');
@@ -216,36 +105,15 @@ function renderHost(host = hostState) {
   );
 }
 
+let settingsForm = null;   // settings.js
+
 function openSettings(install = false) {
   $('#settings').hidden = false;
   send({ type: 'hostCheck' });
-  if (install) $('#btn-install').focus();
+  if (install) settingsForm?.focusInstall();
 }
 
-function useEngine(engine) {
-  settings.engine = engine;
-  for (const r of document.querySelectorAll('input[name=engine]')) r.checked = r.value === engine;
-  saveSettings();
-}
-
-async function installLocalApp() {
-  const help = $('#install-help');
-  const btn = $('#btn-install');
-  btn.disabled = true;
-  help.hidden = false;
-  help.replaceChildren(t('preparingInstaller'));
-  const r = await send({ type: 'installer' });
-  btn.disabled = false;
-  if (r?.error) { help.replaceChildren(el('span', { class: 'err' }, r.error)); return; }
-  const cmd = `bash '${r.path.replace(/'/g, `'\\''`)}'`;
-  const copy = el('button', { class: 'link', onclick: async () => { await navigator.clipboard.writeText(cmd); copy.textContent = t('copied'); } }, t('copyCommand'));
-  help.replaceChildren(
-    el('span', {}, t('installerSaved')),
-    el('code', {}, cmd),
-    el('span', { class: 'muted' }, t('installerExplain')),
-    el('div', { class: 'row-actions' }, copy, el('button', { class: 'link', onclick: () => send({ type: 'hostCheck' }) }, t('doneVerify'))),
-  );
-}
+function useEngine(engine) { settingsForm?.set({ engine }); }
 
 function renderDetect() {
   const isArmed = armedTabs.includes(tabId);
@@ -352,11 +220,6 @@ function renderFileBody(s, d, body) {
     el('input', { type: 'text', value: sel.filename, title: t('fileName'), 'data-focus-key': `fn-${s.id}`, oninput: (e) => { sel.filename = e.target.value; } }),
     el('span', { class: 'file-ext', title: t('fileOriginal') }, `.${ext()}`),
     download));
-}
-
-function fmtSize(b) {
-  const fmt = (n, dg) => n.toLocaleString(UI_LANG, { minimumFractionDigits: dg, maximumFractionDigits: dg });
-  return b >= 1073741824 ? `${fmt(b / 1073741824, 2)} GB` : `${fmt(Math.max(0.1, b / 1048576), 1)} MB`;
 }
 
 function renderStream(s) {
@@ -511,68 +374,22 @@ function renderStream(s) {
   return card;
 }
 
+let lastJobs = {};
 function renderJobs(jobs) {
-  const list = Object.values(jobs || {}).sort((a, b) => b.startedAt - a.startedAt);
+  lastJobs = jobs || {};
+  const list = sortJobs(jobs);
   $('#jobs-head').hidden = list.length === 0;
-  $('#btn-clear-jobs').hidden = !list.some((j) => j.state !== 'running' && j.state !== 'saving');
-  $('#jobs').replaceChildren(...list.map((j) => {
-    const pct = Math.round((j.progress || 0) * 100);
-    const active = j.state === 'running' || j.state === 'saving';
-    const right = active
-      ? [fmtSpeed(j.speed), j.eta != null ? `ETA ${fmtEta(j.eta)}` : null, `${pct}%`].filter(Boolean).join(' · ')
-      : '';
-    const buttons = [];
-    if (active) buttons.push(el('button', { class: 'link', onclick: () => send({ type: 'cancel', jobId: j.id }) }, t('cancel')));
-    if (j.state === 'done') buttons.push(el('button', { class: 'link', onclick: () => send({ type: 'reveal', jobId: j.id }) }, j.engine === 'browser' ? t('showFile') : t('openFolder')));
-    if (!active) buttons.push(el('button', { class: 'link', onclick: () => send({ type: 'removeJob', jobId: j.id }) }, t('remove')));
-    return el('div', { class: `job ${j.state}` },
-      el('div', { class: 'job-top' },
-        el('span', { class: 'job-name', title: j.output || '' }, `${j.filename}.${j.container}`),
-        ...buttons),
-      el('div', { class: 'bar' }, el('i', { style: `width:${j.state === 'done' ? 100 : pct}%` })),
-      el('div', { class: 'job-info' },
-        el('span', {}, j.state === 'error' ? el('span', { class: 'err' }, j.error || t('error')) : `${j.stage || ''}${j.describe ? ' — ' + j.describe : ''}`),
-        el('span', {}, right)),
-    );
-  }));
+  $('#btn-clear-jobs').hidden = !list.some((j) => ['done', 'error', 'cancelled'].includes(j.state));
+  // the popup keeps it short: active, paused and failed downloads plus the latest finished ones
+  const shown = list.filter((j, i) => !['done', 'cancelled'].includes(j.state) || i < 3).slice(0, 8);
+  $('#btn-manager').hidden = shown.length === list.length;
+  $('#btn-manager').textContent = t('showAll', list.length);
+  const overall = renderOverall(jobs);
+  $('#jobs-overall').replaceChildren(...(overall && list.length > 1 ? [overall] : []));
+  $('#jobs').replaceChildren(...shown.map((j) => renderJob(j)));
+  restoreEditFocus($('#jobs'));
 }
-
-// -------------------------------------------------------------- settings ---
-function saveSettings() {
-  settings = {
-    engine: document.querySelector('input[name=engine]:checked')?.value || 'browser',
-    outputDir: $('#set-dir').value.trim() || DEFAULT_SETTINGS.outputDir,
-    container: $('#set-container').value,
-    fragments: Math.min(32, Math.max(1, parseInt($('#set-fragments').value, 10) || 8)),
-    langs: $('#set-langs').value,
-    autoDetect: $('#set-auto').checked,
-  };
-  chrome.storage.local.set({ settings });
-  $('#dir-field').hidden = settings.engine !== 'native';
-  if (settings.engine === 'native') send({ type: 'hostCheck' });
-  renderHost();
-  renderDetect();
-  renderStreams(lastStreams, true);
-}
-
-function bindSettings() {
-  for (const r of document.querySelectorAll('input[name=engine]')) {
-    r.checked = r.value === settings.engine;
-    r.addEventListener('change', saveSettings);
-  }
-  $('#dir-field').hidden = settings.engine !== 'native';
-  $('#set-dir').value = settings.outputDir;
-  $('#set-container').value = settings.container;
-  $('#set-fragments').value = settings.fragments;
-  $('#set-langs').value = settings.langs;
-  $('#set-auto').checked = !!settings.autoDetect;
-  for (const id of ['#set-dir', '#set-container', '#set-fragments', '#set-langs', '#set-auto']) $(id).addEventListener('change', saveSettings);
-  $('#btn-settings').addEventListener('click', () => {
-    if ($('#settings').hidden) openSettings(); else $('#settings').hidden = true;
-  });
-  $('#btn-install').addEventListener('click', installLocalApp);
-  $('#btn-verify').addEventListener('click', () => send({ type: 'hostCheck' }));
-}
+setRerender(() => renderJobs(lastJobs));
 
 // ------------------------------------------------------------------ init ---
 async function init() {
@@ -590,21 +407,28 @@ async function init() {
   if (DONATE_URL) { $('#donate').href = DONATE_URL; $('#donate').hidden = false; }
   $('#credits').textContent = t('credits', `v${chrome.runtime.getManifest().version}`);
   $('#credits').title = 'Based on Fluxy by lorisilbagnino — https://github.com/lorisilbagnino/fluxy';
-  bindSettings();
+  settingsForm = await mountSettings($('#settings-body'), {
+    onChange: (next) => { settings = next; renderHost(); renderDetect(); renderStreams(lastStreams, true); },
+  });
+  $('#btn-settings').addEventListener('click', () => {
+    if ($('#settings').hidden) openSettings(); else $('#settings').hidden = true;
+  });
+  $('#btn-open-page').addEventListener('click', async () => { await send({ type: 'openPage', page: 'downloads' }); window.close(); });
 
   const key = `tab:${tabId}`;
-  const data = await chrome.storage.session.get([key, 'jobs', 'host', 'armed']);
+  const data = await chrome.storage.session.get([key, 'host', 'armed']);
+  const { jobs } = await chrome.storage.local.get('jobs');
   armedTabs = data.armed || [];
   renderDetect();
   renderHost(data.host);
   lastScan = data[key]?.scan || null;
   renderStreams(data[key]?.streams || []);
-  renderJobs(data.jobs);
+  renderJobs(jobs);
 
   chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.jobs) renderJobs(changes.jobs.newValue);
     if (area !== 'session') return;
     if (changes[key]) { lastScan = changes[key].newValue?.scan || null; renderStreams(changes[key].newValue?.streams || []); }
-    if (changes.jobs) renderJobs(changes.jobs.newValue);
     if (changes.host) renderHost(changes.host.newValue);
     if (changes.armed) {
       armedTabs = changes.armed.newValue || [];
@@ -622,7 +446,9 @@ async function init() {
     if (r?.error) $('#empty').textContent = r.error;
   });
   $('#btn-stop').addEventListener('click', () => send({ type: 'disarm', tabId }));
+  $('#speed-limit').replaceWith(speedLimitControl());
   $('#btn-clear-jobs').addEventListener('click', () => send({ type: 'clearFinished' }));
+  $('#btn-manager').addEventListener('click', async () => { await send({ type: 'openPage', page: 'downloads' }); window.close(); });
   // Videos in the page itself (no playback needed): scanned every time the popup opens.
   send({ type: 'scan', tabId });
   // The local app is only started when it is the chosen engine (or the settings are opened).

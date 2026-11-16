@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <title>Fluxy</title>
   <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="settings.css">
 </head>
 <!-- Texts: data-i18n (text), data-i18n-title, data-i18n-aria — keys in _locales/*/messages.json -->
 <body>
@@ -11,53 +12,16 @@
     <img src="icons/icon32.png" alt="" width="24" height="24">
     <h1>Fluxy</h1>
     <span id="host-status" class="pill" data-i18n-title="engineStatusTitle">…</span>
+    <a class="gh" href="https://github.com/lorisilbagnino/fluxy" target="_blank" rel="noopener" data-i18n-title="githubTitle">GitHub</a>
+    <button id="btn-open-page" class="icon-btn open-page" data-i18n-title="openPage" data-i18n-aria="openPage">⤢</button>
     <button id="btn-settings" class="icon-btn" data-i18n-title="settings" data-i18n-aria="settings">⚙</button>
   </header>
 
   <section id="host-warning" class="notice" hidden></section>
 
   <section id="settings" class="panel" hidden>
-    <div class="field">
-      <span class="field-title" data-i18n="engine"></span>
-      <label class="choice">
-        <input type="radio" name="engine" value="browser">
-        <span><span data-i18n="engineBrowser"></span>
-          <small data-i18n="engineBrowserHelp"></small></span>
-      </label>
-      <label class="choice">
-        <input type="radio" name="engine" value="native">
-        <span><span data-i18n="engineNative"></span>
-          <small data-i18n="engineNativeHelp"></small></span>
-      </label>
-    </div>
-    <div id="native-box" class="subpanel">
-      <div class="native-status">
-        <span id="native-text" class="muted">…</span>
-        <button id="btn-verify" class="link" data-i18n="verify"></button>
-        <button id="btn-install" class="ghost" data-i18n="installLocalApp"></button>
-      </div>
-      <div id="install-help" class="install-help" hidden></div>
-      <label id="dir-field"><span data-i18n="outputDir"></span>
-        <input id="set-dir" type="text" spellcheck="false">
-      </label>
-    </div>
-    <div class="row">
-      <label><span data-i18n="defaultFormat"></span>
-        <select id="set-container"><option value="mkv">MKV</option><option value="mp4">MP4</option></select>
-      </label>
-      <label><span data-i18n="parallel"></span>
-        <input id="set-fragments" type="number" min="1" max="32">
-      </label>
-    </div>
-    <label class="check">
-      <input id="set-auto" type="checkbox">
-      <span><span data-i18n="autoDetect"></span>
-        <small data-i18n="autoDetectHelp"></small></span>
-    </label>
-    <label><span data-i18n="prefLangs"></span>
-      <input id="set-langs" type="text" placeholder="en, it" spellcheck="false">
-    </label>
-    <a id="donate" class="donate" target="_blank" rel="noopener" hidden data-i18n="donate"></a>
+    <div id="settings-body" class="panel-body"></div>
+    <a id="donate" class="donate" target="_blank" rel="noopener" hidden><img src="icons/kofi-cup.png" alt="Ko-fi"><span data-i18n="donate"></span></a>
     <!-- Appropriate Legal Notices (GPL-3.0 §5d, ADDITIONAL-TERMS.md term 1): keep in modified versions -->
     <a id="credits" class="credits" href="https://github.com/lorisilbagnino/fluxy" target="_blank" rel="noopener"></a>
   </section>
@@ -65,8 +29,13 @@
   <main>
     <div class="section-head" id="jobs-head" hidden>
       <h2 data-i18n="downloads"></h2>
-      <button id="btn-clear-jobs" class="link" data-i18n="clearFinished"></button>
+      <span class="head-actions">
+        <span id="speed-limit"></span>
+        <button id="btn-clear-jobs" class="link" data-i18n="clearHistory"></button>
+        <button id="btn-manager" class="link" hidden></button>
+      </span>
     </div>
+    <div id="jobs-overall"></div>
     <div id="jobs"></div>
 
     <div class="section-head">

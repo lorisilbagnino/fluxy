@@ -107,6 +107,35 @@ Vedi le sezioni corrispondenti del [README inglese](README.md#debug). In breve: 
 `~/.cache/fluxy/host.log`; app locale testata su Linux (macOS da provare, Windows non ancora); niente DRM;
 `EXT-X-DISCONTINUITY` non riallineato nel motore nel browser.
 
+## Download: pausa, ripresa, riprova
+
+- **Pausa / riprendi**: nel motore del browser i segmenti già scritti restano e alla ripresa si continua dal primo
+  mancante (file diretti: dall'ultimo pezzo da 8 MB); con l'app locale lo strumento in corso (yt-dlp o ffmpeg) viene
+  sospeso e ripreso. Non disponibile durante il salvataggio.
+- **Riprova** (download falliti o annullati): riparte da quanto già scaricato. I link degli stream hanno spesso token a
+  scadenza, quindi prima vengono rinnovati: da un rilevamento più recente della stessa pagina (dopo *Rileva*) o
+  rianalizzando la playlist originale. L'app locale riprova anche da sola i sottotitoli, fino a 3 volte.
+- **La pagina di Fluxy** (⤢ in alto nel popup, sempre presente) ha tre schede: *Download* (ogni download con qualità
+  video, tracce audio, sottotitoli, motore, pagina di origine, destinazione, avvio, tentativi e le stesse azioni),
+  *Impostazioni* (lo stesso modulo del popup, sincronizzato) e *Informazioni* (GitHub, release, segnalazioni,
+  licenza, crediti, Ko-fi). Il popup mostra i download in corso, in pausa e falliti più gli ultimi completati, con un
+  riepilogo su una riga (*1080p · audio IT, EN · sub IT*).
+- **Cronologia persistente**: i download restano anche dopo il riavvio del browser; quelli rimasti a metà diventano
+  *interrotti* e si possono riprovare. *Cancella cronologia* (chiede conferma) o *rimuovi* il singolo download; i file
+  salvati non vengono mai toccati. La cronologia conserva gli ultimi 300 download conclusi.
+- **Coda**: girano al massimo *Download contemporanei* download alla volta (impostazioni, predefinito 2); gli altri
+  aspettano *in coda* e partono in ordine (anche dopo *riprova* e *riprendi*). Ogni download mostra sotto la sua barra
+  una barra sottile per traccia (video, ogni audio, ogni sottotitolo) e una barra generale riassume quelli attivi.
+- **Dettagli dell'avanzamento**: ogni download mostra le connessioni (⇉ attive/massime nel motore del browser; le
+  massime per l'app locale, perché yt-dlp non le comunica), MB scaricati / totale (*≈* finché il totale di uno stream
+  è stimato), velocità e tempo rimanente; la barra generale li somma.
+- **Limite di velocità** (impostazioni, e selettore rapido ⏱ negli elenchi dei download): MB/s per tutti i download
+  insieme. Motore nel browser: vale subito, anche sui download in corso; app locale: `--limit-rate` di yt-dlp,
+  diviso tra i suoi download in corso, per quelli avviati dopo la modifica.
+- **Rinomina durante il download** (✎): il nome serve solo al salvataggio, quindi si può cambiare fino ad allora
+  (app locale: fino alla fine dell'unione).
+- Rimuovendo un download in pausa o fallito si cancellano anche i suoi dati temporanei.
+
 ## Licenza
 
 Fluxy è software libero: [GNU GPL v3.0 o successiva](LICENSE), con i [termini aggiuntivi](ADDITIONAL-TERMS.md)

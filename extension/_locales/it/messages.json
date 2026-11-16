@@ -39,7 +39,41 @@
     "message": "Formato predefinito"
   },
   "parallel": {
-    "message": "Connessioni in parallelo"
+    "message": "Connessioni per download"
+  },
+  "maxJobs": {
+    "message": "Download contemporanei"
+  },
+  "speedLimit": {
+    "message": "Limite di velocità (MB/s, 0 = nessuno)"
+  },
+  "speedLimitHelp": {
+    "message": "Per tutti i download insieme. Motore nel browser: vale subito, anche per i download in corso; app locale: per i download avviati dopo la modifica."
+  },
+  "speedLimitTitle": {
+    "message": "Limite di velocità per tutti i download"
+  },
+  "noLimit": {
+    "message": "Nessun limite"
+  },
+  "connsTitle": {
+    "message": "$p1$ connessioni attive su $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "connsMaxTitle": {
+    "message": "Fino a $p1$ connessioni (app locale)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
   },
   "autoDetect": {
     "message": "Rilevamento automatico su tutte le schede"
@@ -55,6 +89,71 @@
   },
   "clearFinished": {
     "message": "rimuovi completati"
+  },
+  "clearHistory": {
+    "message": "Cancella cronologia"
+  },
+  "clearHistoryTitle": {
+    "message": "Toglie dall'elenco i download completati, falliti e annullati (i file salvati restano)"
+  },
+  "clearHistoryConfirm": {
+    "message": "Sicuro? Clicca di nuovo"
+  },
+  "showAll": {
+    "message": "tutti ($p1$) ↗",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "openPage": {
+    "message": "Apri la pagina di Fluxy: download, impostazioni, informazioni"
+  },
+  "githubTitle": {
+    "message": "Fluxy su GitHub: codice, release, segnalazioni"
+  },
+  "tabDownloads": {
+    "message": "Download"
+  },
+  "tabSettings": {
+    "message": "Impostazioni"
+  },
+  "tabAbout": {
+    "message": "Informazioni"
+  },
+  "aboutText": {
+    "message": "Fluxy salva gli stream HLS/DASH e i video di una pagina in un unico MKV/MP4, con le tracce audio e i sottotitoli che scegli, senza ricodifica."
+  },
+  "aboutSource": {
+    "message": "Codice sorgente su GitHub"
+  },
+  "aboutReleases": {
+    "message": "Release e novità"
+  },
+  "aboutIssues": {
+    "message": "Segnala un problema o proponi una funzione"
+  },
+  "aboutPrivacy": {
+    "message": "Informativa sulla privacy"
+  },
+  "aboutLicenseTitle": {
+    "message": "Licenza"
+  },
+  "aboutLicense": {
+    "message": "Software libero: GNU GPL v3.0 o successiva, con termini aggiuntivi (attribuzione, nome e logo)."
+  },
+  "aboutThirdTitle": {
+    "message": "Software di terze parti"
+  },
+  "aboutThird": {
+    "message": "Realizzato con Mediabunny (MPL-2.0); l'app locale facoltativa usa FFmpeg e yt-dlp."
+  },
+  "aboutDonate": {
+    "message": "Fluxy è gratuito. Se ti è utile, puoi sostenerlo su Ko-fi:"
+  },
+  "errInterrupted": {
+    "message": "Interrotto alla chiusura del browser: riprova per continuare"
   },
   "streamsInTab": {
     "message": "Video in questa pagina"
@@ -117,7 +216,16 @@
     "message": "copiato ✓"
   },
   "donate": {
-    "message": "Sostieni Fluxy ♥"
+    "message": "Sostieni Fluxy su Ko-fi"
+  },
+  "rename": {
+    "message": "Rinomina il file"
+  },
+  "renameSave": {
+    "message": "Salva il nome (Invio)"
+  },
+  "renameCancel": {
+    "message": "Annulla (Esc)"
   },
   "credits": {
     "message": "Fluxy $p1$ — di lorisilbagnino · licenza GPL-3.0",
@@ -290,6 +398,96 @@
   "remove": {
     "message": "rimuovi"
   },
+  "pause": {
+    "message": "pausa"
+  },
+  "resume": {
+    "message": "riprendi"
+  },
+  "retryJob": {
+    "message": "riprova"
+  },
+  "openManager": {
+    "message": "apri ↗"
+  },
+  "openManagerTitle": {
+    "message": "Apri la pagina dei download"
+  },
+  "managerTitle": {
+    "message": "Fluxy — Download"
+  },
+  "managerCounts": {
+    "message": "$p1$ in corso · $p2$ in totale",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "overall": {
+    "message": "$p1$ in corso · $p2$ in coda · $p3$ in pausa",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      },
+      "p3": {
+        "content": "$3"
+      }
+    }
+  },
+  "overallTitle": {
+    "message": "Tutti i download attivi"
+  },
+  "noDownloads": {
+    "message": "Nessun download."
+  },
+  "audioShort": {
+    "message": "audio"
+  },
+  "subShort": {
+    "message": "sub"
+  },
+  "dVideo": {
+    "message": "Video"
+  },
+  "dAudio": {
+    "message": "Audio"
+  },
+  "dSubs": {
+    "message": "Sottotitoli"
+  },
+  "dEngine": {
+    "message": "Motore"
+  },
+  "dSource": {
+    "message": "Pagina"
+  },
+  "dSavedTo": {
+    "message": "Salvato in"
+  },
+  "dStarted": {
+    "message": "Avviato"
+  },
+  "dRetries1": {
+    "message": "1 nuovo tentativo"
+  },
+  "dRetries": {
+    "message": "$p1$ nuovi tentativi",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "hint403": {
+    "message": "Il server ha rifiutato la richiesta: il link potrebbe essere scaduto. Riprova lo rinnova; se non basta, riapri la pagina, premi Rileva e riprova."
+  },
   "error": {
     "message": "Errore"
   },
@@ -303,6 +501,9 @@
     "message": "Analizza con yt-dlp"
   },
   "stageQueued": {
+    "message": "Avvio"
+  },
+  "stageWaiting": {
     "message": "In coda"
   },
   "stageDone": {
@@ -462,6 +663,9 @@
   },
   "eng_stageSaving": {
     "message": "Salvataggio"
+  },
+  "eng_stagePaused": {
+    "message": "In pausa"
   },
   "eng_badRange": {
     "message": "Il server non rispetta i download a pezzi: riprova"
