@@ -497,6 +497,208 @@
   "aboutAmo": {
     "message": "Fluxy on Firefox Add-ons"
   },
+  "tabCast": {
+    "message": "Cast"
+  },
+  "castTo": {
+    "message": "Cast"
+  },
+  "castStartBtn": {
+    "message": "Cast to TV"
+  },
+  "castNow": {
+    "message": "On the TV"
+  },
+  "castOpenPage": {
+    "message": "open ↗"
+  },
+  "castDownloadsLink": {
+    "message": "downloads ($p1$) ↗",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "castEmpty": {
+    "message": "Nothing is being cast. In the popup, pick \"Cast\" on a stream, choose video, audio and subtitles, then the TV."
+  },
+  "castDevicesTitle": {
+    "message": "TVs on the network"
+  },
+  "castSearch": {
+    "message": "Search again"
+  },
+  "castSearchTitle": {
+    "message": "Search the network for Chromecasts and DLNA TVs"
+  },
+  "castSearching": {
+    "message": "Searching…"
+  },
+  "castNoDevices": {
+    "message": "No TV yet: search the network"
+  },
+  "castNoneFound": {
+    "message": "No TV found. Check that it is on and on the same network; if the PC has a firewall, see below or add the TV by address."
+  },
+  "castDevice": {
+    "message": "TV"
+  },
+  "castAudioOnly": {
+    "message": "audio only"
+  },
+  "castManual": {
+    "message": "added by address"
+  },
+  "castAdd": {
+    "message": "Add"
+  },
+  "castAddPlaceholder": {
+    "message": "192.168.1.20 (Chromecast) or http://…/description.xml (DLNA)"
+  },
+  "castAddHelp": {
+    "message": "Add a TV by address when the search can't see it: the IP of a Chromecast, or the description URL of a DLNA TV."
+  },
+  "castStale": {
+    "message": "not seen in the last search"
+  },
+  "castRouteAuto": {
+    "message": "automatic"
+  },
+  "castRouteAutoHelp": {
+    "message": "Tries the TV on its own first (nothing to open on this PC), then the same TV under its other protocol, and only as a last resort through the local app."
+  },
+  "castRecastTitle": {
+    "message": "Cast again now, from the current position"
+  },
+  "castTracksFixed": {
+    "message": "This TV is playing the original stream by itself: audio and subtitles are the ones it picks. To choose them, cast through the local app."
+  },
+  "castAllow": {
+    "message": "Allow the TV to connect to this PC"
+  },
+  "castAllowHelp": {
+    "message": "To choose audio and subtitles the TV must take the video from this PC: the system will ask your password once to allow it from the home network."
+  },
+  "castAllowWaiting": {
+    "message": "Waiting for the password in the system window…"
+  },
+  "castAllowDone": {
+    "message": "Allowed: casting again through the local app…"
+  },
+  "castAllowCancelled": {
+    "message": "Cancelled: nothing was changed."
+  },
+  "castFirewallClosed": {
+    "message": "The firewall of this PC ($p1$) blocks the TVs: casting works, but they choose audio and subtitles by themselves.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "castFirewall": {
+    "message": "The local app finds TVs on UDP ports 5353 (Chromecast) and 1900 (DLNA), and with \"through the local app\" the TV fetches the video from this PC on TCP port 8790: if the PC has a firewall, allow them from the home network (with ufw: sudo ufw allow from 192.168.1.0/24 to any port 8790 proto tcp, and the same with port 1900 proto udp for DLNA TVs)."
+  },
+  "castRouteLabel": {
+    "message": "Route"
+  },
+  "castRouteRelay": {
+    "message": "through the local app"
+  },
+  "castRouteDirect": {
+    "message": "direct"
+  },
+  "castRouteHelp": {
+    "message": "How the TV gets the video"
+  },
+  "castRouteRelayHelp": {
+    "message": "The local app fetches the stream with the page's headers and passes it on to the TV: works with protected streams."
+  },
+  "castRouteDirectHelp": {
+    "message": "The TV fetches the original address by itself: lighter for the PC, but many sites refuse it (no cookies, no CORS)."
+  },
+  "castNeedsApp": {
+    "message": "Casting goes through the local app: install it to cast to Chromecasts and DLNA TVs."
+  },
+  "castCheckingApp": {
+    "message": "Checking the local app…"
+  },
+  "castPickDevice": {
+    "message": "Choose a TV first (search the network)"
+  },
+  "castDirectHint": {
+    "message": "Try the \"through the local app\" route: the site may refuse requests that don't come from its page."
+  },
+  "castState_connecting": {
+    "message": "connecting…"
+  },
+  "castState_loading": {
+    "message": "loading…"
+  },
+  "castState_buffering": {
+    "message": "buffering…"
+  },
+  "castState_playing": {
+    "message": "playing"
+  },
+  "castState_paused": {
+    "message": "paused"
+  },
+  "castState_idle": {
+    "message": "stopped on the TV"
+  },
+  "castState_ended": {
+    "message": "finished"
+  },
+  "castState_error": {
+    "message": "error"
+  },
+  "castState_stopped": {
+    "message": "stopped"
+  },
+  "castSeek": {
+    "message": "Position"
+  },
+  "castBack": {
+    "message": "Back 10 seconds"
+  },
+  "castForward": {
+    "message": "Forward 30 seconds"
+  },
+  "castPlay": {
+    "message": "Play"
+  },
+  "castPause": {
+    "message": "Pause"
+  },
+  "castStop": {
+    "message": "Stop casting"
+  },
+  "castMute": {
+    "message": "Mute"
+  },
+  "castUnmute": {
+    "message": "Unmute"
+  },
+  "castVolume": {
+    "message": "TV volume"
+  },
+  "castVolumeFixed": {
+    "message": "The volume is set on the TV (fixed on this device)"
+  },
+  "castSubsOff": {
+    "message": "No subtitles"
+  },
+  "castVideoAuto": {
+    "message": "Quality chosen by the TV (direct route): use the local app route to pick it"
+  },
+  "castRetry": {
+    "message": "Cast again"
+  },
+  "castClose": {
+    "message": "close"
+  },
   "hint429": {
     "message": "The site is limiting requests (too many at once). Wait a few minutes, lower concurrent downloads and connections in the settings, then retry."
   },

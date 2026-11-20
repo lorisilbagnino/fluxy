@@ -6,7 +6,7 @@
 Speaks the Chrome native messaging protocol on stdin/stdout (4-byte little
 endian length + UTF-8 JSON). Probes HLS/DASH manifests, downloads the selected
 renditions with yt-dlp / ffmpeg and muxes them into one MKV/MP4 without
-re-encoding (stream copy).
+re-encoding (stream copy). Also casts streams to Chromecasts and DLNA TVs.
 
 Can also be run by hand for debugging:
     fluxy_host.py probe <url> [Header: value ...]
@@ -15,21 +15,28 @@ from __future__ import annotations
 
 import glob
 import hashlib
+import html
+import http.server
 import json
 import os
 import re
+import secrets
 import shutil
 import signal
+import socket
+import ssl
 import struct
 import subprocess
 import sys
 import threading
 import time
 import traceback
+import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 
-VERSION = "0.12.0"
+VERSION = "0.13.0"
 CACHE_DIR = os.path.join(os.path.expanduser("~/.cache"), "fluxy")
 LOG_FILE = os.path.join(CACHE_DIR, "host.log")
 UA_FALLBACK = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -107,6 +114,25 @@ TEXT = {
         "Subtitles {lang} ({i}/{n})": "Sottotitoli {lang} ({i}/{n})",
         "Merging into one file": "Unione in un unico file",
         "Paused": "In pausa",
+        "The TV didn't answer": "La TV non ha risposto",
+        "The TV couldn't start the player ({reason})": "La TV non è riuscita ad avviare il lettore ({reason})",
+        "The TV refused the stream ({reason})": "La TV ha rifiutato lo stream ({reason})",
+        "The TV doesn't support {what}": "La TV non supporta {what}",
+        "The TV couldn't play the stream": "La TV non è riuscita a riprodurre lo stream",
+        "The TV reported an error: {reason}": "La TV ha segnalato un errore: {reason}",
+        "Connection to the TV lost": "Connessione con la TV persa",
+        "This video has separate audio and video: use the local app route": "Questo video ha audio e video separati: usa il percorso tramite app locale",
+        "This TV can't play this stream by itself: use the local app route": "Questa TV non può riprodurre lo stream da sola: usa il percorso tramite app locale",
+        "TV not found: search again": "TV non trovata: cerca di nuovo",
+        "No TV answers at {address}": "Nessuna TV risponde all'indirizzo {address}",
+        "The TV can't reach this PC on port {port}: a firewall is probably blocking it.": "La TV non riesce a collegarsi a questo PC sulla porta {port}: probabilmente la blocca un firewall.",
+        "With ufw: {cmd}": "Con ufw: {cmd}",
+        "This system can't ask for the password here: {cmd}": "Questo sistema non può chiedere la password da qui: {cmd}",
+        "The TV can't reach this PC: it now plays the stream by itself (tracks chosen by the TV).": "La TV non riesce a raggiungere questo PC: ora riproduce lo stream da sola (tracce scelte dalla TV).",
+        "{tv} couldn't play the stream: switched to {other}.": "{tv} non è riuscita a riprodurre lo stream: passata a {other}.",
+        "The TV couldn't play the original address: switched to the local app route.": "La TV non è riuscita a riprodurre l'indirizzo originale: passata al percorso tramite app locale.",
+        "With firewalld: {cmd}": "Con firewalld: {cmd}",
+        "Can't connect to the TV ({reason})": "Impossibile collegarsi alla TV ({reason})",
         "Downloading {n} tracks": "Download di {n} tracce in parallelo",
         "Nothing left to download: every track was skipped": "Niente da scaricare: tutte le tracce sono state saltate",
         "{label} file not found after the download": "File {label} non trovato dopo il download",
@@ -149,6 +175,8 @@ def clean_headers(headers: dict | None) -> dict:
 
 def http_get(url: str, headers: dict, timeout=20) -> tuple[str, str, str]:
     """Returns (text, final_url, content_type)."""
+    if not any(k.lower() == "user-agent" for k in headers):
+        headers = {**headers, "User-Agent": UA_FALLBACK}     # some sites refuse Python's own
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         data = resp.read(20 * 1024 * 1024)
@@ -1054,6 +1082,1576 @@ JOBS: dict[str, Job] = {}
 # --------------------------------------------------------------------------
 # Dispatcher
 # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# Casting: Chromecast (Cast v2) and DLNA/UPnP renderers, standard library only
+# --------------------------------------------------------------------------
+# Discovery: mDNS (_googlecast._tcp) for Chromecasts, SSDP for DLNA MediaRenderers.
+# Routes: "direct" = the TV fetches the original URL itself; "relay" = this app fetches the stream with the
+# page's headers/cookies and serves it to the TV on the local network (also fixes CORS for Chromecasts).
+
+CAST_APP_DEFAULT = "CC1AD845"   # Google's Default Media Receiver
+NS_CONN = "urn:x-cast:com.google.cast.tp.connection"
+NS_HB = "urn:x-cast:com.google.cast.tp.heartbeat"
+NS_RECV = "urn:x-cast:com.google.cast.receiver"
+NS_MEDIA = "urn:x-cast:com.google.cast.media"
+RELAY_PORT = int(os.environ.get("FLUXY_RELAY_PORT") or 8790)   # TCP port the TVs connect to (relay route)
+DEVICES: dict = {}               # id -> device description (last discovery)
+CAST: dict = {"session": None}   # the active cast session (one at a time)
+
+
+# ---- discovery -------------------------------------------------------------------------------
+def _dns_name(name: str) -> bytes:
+    return b"".join(bytes([len(p.encode())]) + p.encode() for p in name.split(".") if p) + b"\0"
+
+
+def _dns_read_name(buf: bytes, off: int) -> tuple[str, int]:
+    labels, end, jumps = [], None, 0
+    while True:
+        n = buf[off]
+        if n == 0:
+            off += 1
+            break
+        if n & 0xC0 == 0xC0:
+            if end is None:
+                end = off + 2
+            off = ((n & 0x3F) << 8) | buf[off + 1]
+            jumps += 1
+            if jumps > 30:
+                raise ValueError("dns loop")
+            continue
+        labels.append(buf[off + 1:off + 1 + n].decode("utf-8", "replace"))
+        off += 1 + n
+    return ".".join(labels), end if end is not None else off
+
+
+def _dns_records(buf: bytes) -> list[tuple]:
+    qd, an, ns, ar = struct.unpack(">4H", buf[4:12])
+    off = 12
+    for _ in range(qd):
+        _, off = _dns_read_name(buf, off)
+        off += 4
+    out = []
+    for _ in range(an + ns + ar):
+        name, off = _dns_read_name(buf, off)
+        rtype, _cls, _ttl, rdlen = struct.unpack(">HHIH", buf[off:off + 10])
+        off += 10
+        rd = buf[off:off + rdlen]
+        if rtype == 12:                      # PTR
+            out.append((name.lower(), "PTR", _dns_read_name(buf, off)[0]))
+        elif rtype == 33:                    # SRV
+            port = struct.unpack(">H", rd[4:6])[0]
+            out.append((name.lower(), "SRV", (port, _dns_read_name(buf, off + 6)[0].lower())))
+        elif rtype == 16:                    # TXT
+            txt, i = {}, 0
+            while i < len(rd):
+                n = rd[i]
+                k, _, v = rd[i + 1:i + 1 + n].decode("utf-8", "replace").partition("=")
+                txt[k] = v
+                i += 1 + n
+            out.append((name.lower(), "TXT", txt))
+        elif rtype == 1 and rdlen == 4:      # A
+            out.append((name.lower(), "A", socket.inet_ntoa(rd)))
+        off += rdlen
+    return out
+
+
+def _mcast_socket(group: str, port: int) -> tuple[socket.socket, bool]:
+    """UDP socket for a discovery protocol. Bound to the protocol's own port (shared with avahi & co.) when
+    possible: many desktop firewalls drop replies sent to a random port but let the standard ones through."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    shared = False
+    try:
+        if hasattr(socket, "SO_REUSEPORT"):
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        sock.bind(("", port))
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP,
+                        struct.pack("4s4s", socket.inet_aton(group), socket.inet_aton("0.0.0.0")))
+        shared = True
+    except OSError as e:
+        log("discovery: can't share port", port, e)
+        sock.close()
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 255)
+    sock.settimeout(0.3)
+    return sock, shared
+
+
+def discover_chromecasts(timeout: float = 3.0) -> list[dict]:
+    service = "_googlecast._tcp.local"
+    sock, shared = _mcast_socket("224.0.0.251", 5353)
+    # on port 5353 the answers come back by multicast; from a random port ask for a unicast answer (QU bit)
+    query = struct.pack(">6H", 0, 0, 1, 0, 0, 0) + _dns_name(service) + struct.pack(">HH", 12, 1 if shared else 0x8001)
+    recs, senders = [], {}
+    end = time.time() + timeout
+    sent = 0
+    try:
+        while time.time() < end:
+            if sent < 3 and time.time() > end - timeout + sent * 0.8:
+                try:
+                    sock.sendto(query, ("224.0.0.251", 5353))
+                except OSError as e:
+                    log("mdns send", e)
+                sent += 1
+            try:
+                data, addr = sock.recvfrom(9000)
+            except socket.timeout:
+                continue
+            try:
+                got = _dns_records(data)
+            except (ValueError, IndexError, struct.error):
+                continue
+            recs += got
+            for name, kind, _v in got:
+                senders.setdefault(name, addr[0])
+    finally:
+        sock.close()
+    ptr = {v.lower() for n, k, v in recs if k == "PTR" and n == service.lower()}
+    srv = {n: v for n, k, v in recs if k == "SRV"}
+    txt = {n: v for n, k, v in recs if k == "TXT"}
+    a = {n: v for n, k, v in recs if k == "A"}
+    out = []
+    for inst in ptr:
+        port, target = srv.get(inst, (8009, ""))
+        host = a.get(target) or senders.get(inst) or senders.get(target)
+        if not host:
+            continue
+        t = txt.get(inst, {})
+        try:
+            audio_only = not int(t.get("ca") or 1) & 1          # capability bit 0: video output
+        except ValueError:
+            audio_only = False
+        out.append({"id": "cc:" + (t.get("id") or host), "kind": "chromecast", "name": t.get("fn") or inst.split(".")[0],
+                    "model": t.get("md") or "Chromecast", "host": host, "port": port, "audioOnly": audio_only})
+    return out
+
+
+def _xml_text(el, path, ns):
+    found = el.find(path, ns)
+    return (found.text or "").strip() if found is not None and found.text else ""
+
+
+def discover_dlna(timeout: float = 3.0) -> list[dict]:
+    msg = ("M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 2\r\n"
+           "ST: urn:schemas-upnp-org:device:MediaRenderer:1\r\n\r\n").encode()
+    sock, _shared = _mcast_socket("239.255.255.250", 1900)
+    locations = set()
+    end = time.time() + timeout
+    sent = 0
+    try:
+        while time.time() < end:
+            if sent < 2 and time.time() > end - timeout + sent:
+                try:
+                    sock.sendto(msg, ("239.255.255.250", 1900))
+                except OSError as e:
+                    log("ssdp send", e)
+                sent += 1
+            try:
+                data, _addr = sock.recvfrom(9000)
+            except socket.timeout:
+                continue
+            if data.startswith(b"M-SEARCH"):
+                continue
+            if data.startswith(b"NOTIFY") and not re.search(rb"^NT:.*MediaRenderer", data, re.I | re.M):
+                continue                      # periodic announcements of other kinds of devices
+            m = re.search(rb"^location:\s*(\S+)", data, re.I | re.M)
+            if m:
+                locations.add(m.group(1).decode("latin-1"))
+    finally:
+        sock.close()
+    out = []
+    for loc in locations:
+        try:
+            dev = dlna_device(loc)
+        except Exception as e:  # noqa: BLE001
+            log("dlna description", loc, e)
+            continue
+        if dev:
+            out.append(dev)
+    return out
+
+
+def dlna_device(loc: str) -> dict | None:
+    """A DLNA renderer from its description URL (the LOCATION of its SSDP answer)."""
+    ns = {"d": "urn:schemas-upnp-org:device-1-0"}
+    with urllib.request.urlopen(loc, timeout=3) as r:
+        root = ET.fromstring(r.read())
+    base = _xml_text(root, "d:URLBase", ns) or loc
+    for dev in root.iter("{urn:schemas-upnp-org:device-1-0}device"):
+        svcs = {}
+        for s in dev.findall("d:serviceList/d:service", ns):
+            st = _xml_text(s, "d:serviceType", ns)
+            ctl = urllib.parse.urljoin(base, _xml_text(s, "d:controlURL", ns))
+            if ":AVTransport:" in st:
+                svcs["avt"] = (st, ctl)
+            elif ":RenderingControl:" in st:
+                svcs["rc"] = (st, ctl)
+        if "avt" not in svcs:
+            continue
+        return {"id": "dlna:" + (_xml_text(dev, "d:UDN", ns) or loc), "kind": "dlna",
+                "name": _xml_text(dev, "d:friendlyName", ns) or urllib.parse.urlparse(loc).hostname,
+                "model": " ".join(x for x in (_xml_text(dev, "d:manufacturer", ns), _xml_text(dev, "d:modelName", ns)) if x),
+                "host": urllib.parse.urlparse(loc).hostname, "services": svcs}
+    return None
+
+
+def discover(timeout: float = 3.0) -> list[dict]:
+    found: list = []
+    def run(fn):
+        try:
+            found.extend(fn(timeout))
+        except Exception:  # noqa: BLE001
+            log("discovery", fn.__name__, traceback.format_exc())
+    ths = [threading.Thread(target=run, args=(f,), daemon=True) for f in (discover_chromecasts, discover_dlna)]
+    for th in ths:
+        th.start()
+    for th in ths:
+        th.join(timeout + 5)
+    uniq = {d["id"]: d for d in found}
+    DEVICES.update(uniq)
+    return sorted(uniq.values(), key=lambda d: (d["kind"], d["name"].lower()))
+
+
+def add_device(address: str) -> dict:
+    """A TV the discovery can't see (firewall, other subnet): a Chromecast IP[:port] or a DLNA description URL."""
+    address = address.strip()
+    if address.startswith(("http://", "https://")):
+        dev = dlna_device(address)
+        if not dev:
+            raise RuntimeError("no AVTransport")
+    else:
+        host, _, port = address.partition(":")
+        c = CastV2(host, int(port or 8009), lambda ev: None)
+        try:
+            st = c.request("receiver-0", NS_RECV, {"type": "GET_STATUS"}, timeout=6)
+        finally:
+            c.close()
+        if st.get("type") != "RECEIVER_STATUS":
+            raise RuntimeError("not a Chromecast")
+        name, model = f"Chromecast {host}", "Chromecast"
+        try:      # the name set in Google Home, from the device's own setup page
+            with urllib.request.urlopen(f"http://{host}:8008/setup/eureka_info?params=name,device_info", timeout=2) as r:
+                info = json.loads(r.read())
+                name = info.get("name") or name
+                model = (info.get("device_info") or {}).get("model_name") or model
+        except Exception:  # noqa: BLE001
+            pass
+        dev = {"id": f"cc:{host}:{port or 8009}", "kind": "chromecast", "name": name, "model": model,
+               "host": host, "port": int(port or 8009), "audioOnly": False}
+    DEVICES[dev["id"]] = dev
+    return dev
+
+
+def public_device(d: dict) -> dict:
+    return {k: d.get(k) for k in ("id", "kind", "name", "model", "host", "port", "audioOnly", "services")}
+
+
+# ---- Chromecast: Cast v2 over TLS, protobuf CastMessage written by hand ---------------------
+def _varint(n: int) -> bytes:
+    out = bytearray()
+    while True:
+        b = n & 0x7F
+        n >>= 7
+        out.append(b | (0x80 if n else 0))
+        if not n:
+            return bytes(out)
+
+
+def cast_encode(src: str, dst: str, ns: str, payload: str) -> bytes:
+    def s(field, v):
+        b = v.encode()
+        return _varint(field << 3 | 2) + _varint(len(b)) + b
+    return _varint(1 << 3) + _varint(0) + s(2, src) + s(3, dst) + s(4, ns) + _varint(5 << 3) + _varint(0) + s(6, payload)
+
+
+def cast_decode(buf: bytes) -> dict:
+    out, i = {}, 0
+    while i < len(buf):
+        key, shift = 0, 0
+        while True:
+            b = buf[i]; i += 1
+            key |= (b & 0x7F) << shift; shift += 7
+            if not b & 0x80:
+                break
+        field, wt = key >> 3, key & 7
+        if wt == 0:
+            v, shift = 0, 0
+            while True:
+                b = buf[i]; i += 1
+                v |= (b & 0x7F) << shift; shift += 7
+                if not b & 0x80:
+                    break
+            out[field] = v
+        elif wt == 2:
+            n, shift = 0, 0
+            while True:
+                b = buf[i]; i += 1
+                n |= (b & 0x7F) << shift; shift += 7
+                if not b & 0x80:
+                    break
+            out[field] = buf[i:i + n]
+            i += n
+        else:
+            raise ValueError(f"wire type {wt}")
+    return {"src": out.get(2, b"").decode(), "dst": out.get(3, b"").decode(), "ns": out.get(4, b"").decode(),
+            "payload": out.get(6, b"").decode("utf-8", "replace")}
+
+
+class CastV2:
+    """One connection to a Chromecast, running Google's Default Media Receiver."""
+
+    def __init__(self, host: str, port: int, on_event):
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE      # Chromecasts use self-signed certificates
+        raw = socket.create_connection((host, port), timeout=8)
+        self.sock = ctx.wrap_socket(raw)
+        self.sock.settimeout(None)
+        self.on_event = on_event
+        self.lock = threading.Lock()
+        self.req = 0
+        self.waiters: dict = {}
+        self.transport = None
+        self.app_session = None
+        self.media_session = None
+        self.closed = False
+        self.send("receiver-0", NS_CONN, {"type": "CONNECT"})
+        threading.Thread(target=self._reader, daemon=True).start()
+        threading.Thread(target=self._heartbeat, daemon=True).start()
+
+    def send(self, dst: str, ns: str, obj: dict):
+        data = cast_encode("sender-0", dst, ns, json.dumps(obj))
+        with self.lock:
+            self.sock.sendall(struct.pack(">I", len(data)) + data)
+
+    def request(self, dst: str, ns: str, obj: dict, timeout: float = 15) -> dict:
+        with self.lock:
+            self.req += 1
+            rid = self.req
+        box = {"ev": threading.Event(), "msg": None}
+        self.waiters[rid] = box
+        self.send(dst, ns, {**obj, "requestId": rid})
+        if not box["ev"].wait(timeout):
+            self.waiters.pop(rid, None)
+            raise RuntimeError(T("The TV didn't answer"))
+        return box["msg"]
+
+    def _recv_exact(self, n: int) -> bytes:
+        buf = b""
+        while len(buf) < n:
+            chunk = self.sock.recv(n - len(buf))
+            if not chunk:
+                raise ConnectionError("closed")
+            buf += chunk
+        return buf
+
+    def _reader(self):
+        try:
+            while not self.closed:
+                n = struct.unpack(">I", self._recv_exact(4))[0]
+                m = cast_decode(self._recv_exact(n))
+                try:
+                    p = json.loads(m["payload"]) if m["payload"] else {}
+                except ValueError:
+                    continue
+                typ = p.get("type")
+                if m["ns"] == NS_HB and typ == "PING":
+                    self.send(m["src"], NS_HB, {"type": "PONG"})
+                    continue
+                if m["ns"] == NS_CONN and typ == "CLOSE" and m["src"] == self.transport:
+                    self.transport = None
+                    self.on_event({"type": "closed"})
+                    continue
+                if typ == "RECEIVER_STATUS":
+                    self.on_event({"type": "receiver", "status": p.get("status") or {}})
+                elif typ == "MEDIA_STATUS":
+                    st = (p.get("status") or [None])[0]
+                    if st:
+                        self.media_session = st.get("mediaSessionId") or self.media_session
+                        self.on_event({"type": "media", "status": st})
+                elif typ in ("LOAD_FAILED", "LOAD_CANCELLED", "INVALID_REQUEST", "LAUNCH_ERROR", "ERROR"):
+                    self.on_event({"type": "error", "error": p.get("reason") or p.get("detailedErrorCode") or typ, "raw": p})
+                rid = p.get("requestId")
+                if rid and rid in self.waiters:
+                    box = self.waiters.pop(rid)
+                    box["msg"] = p
+                    box["ev"].set()
+        except Exception as e:  # noqa: BLE001
+            if not self.closed:
+                log("cast reader: the TV closed the connection", e)
+                self.closed = True
+                self.on_event({"type": "closed", "error": str(e)})
+
+    def _heartbeat(self):
+        while not self.closed:
+            time.sleep(5)
+            try:
+                self.send("receiver-0", NS_HB, {"type": "PING"})
+            except OSError:
+                return
+
+    def launch(self, app: str = CAST_APP_DEFAULT):
+        r = self.request("receiver-0", NS_RECV, {"type": "LAUNCH", "appId": app}, timeout=25)
+        deadline = time.time() + 20
+        while True:
+            apps = (r.get("status") or {}).get("applications") or []
+            mine = next((a for a in apps if a.get("appId") == app and a.get("transportId")), None)
+            if mine:
+                self.transport, self.app_session = mine["transportId"], mine.get("sessionId")
+                self.send(self.transport, NS_CONN, {"type": "CONNECT"})
+                return
+            if r.get("type") in ("LAUNCH_ERROR", "INVALID_REQUEST") or time.time() > deadline:
+                raise RuntimeError(T("The TV couldn't start the player ({reason})", reason=r.get("reason") or r.get("type")))
+            time.sleep(0.7)
+            r = self.request("receiver-0", NS_RECV, {"type": "GET_STATUS"})
+
+    def load(self, media: dict, current_time: float = 0, active_tracks=None):
+        body = {"type": "LOAD", "media": media, "autoplay": True, "currentTime": max(0, current_time)}
+        if active_tracks:
+            body["activeTrackIds"] = active_tracks
+        r = self.request(self.transport, NS_MEDIA, body, timeout=40)
+        if r.get("type") != "MEDIA_STATUS":
+            raise RuntimeError(T("The TV refused the stream ({reason})", reason=r.get("reason") or r.get("detailedErrorCode") or r.get("type")))
+        return r
+
+    def media(self, typ: str, **extra):
+        if not self.transport or self.media_session is None:
+            return
+        self.send(self.transport, NS_MEDIA, {"type": typ, "mediaSessionId": self.media_session, "requestId": 0, **extra})
+
+    def play(self): self.media("PLAY")
+    def pause(self): self.media("PAUSE")
+    def seek(self, t: float): self.media("SEEK", currentTime=max(0, t), resumeState="PLAYBACK_START")
+    def set_tracks(self, ids: list[int]): self.media("EDIT_TRACKS_INFO", activeTrackIds=ids)
+
+    def set_volume(self, level: float):
+        self.send("receiver-0", NS_RECV, {"type": "SET_VOLUME", "volume": {"level": max(0.0, min(1.0, level))}, "requestId": 0})
+
+    def set_muted(self, muted: bool):
+        self.send("receiver-0", NS_RECV, {"type": "SET_VOLUME", "volume": {"muted": bool(muted)}, "requestId": 0})
+
+    def stop(self):
+        try:
+            if self.app_session:
+                self.send("receiver-0", NS_RECV, {"type": "STOP", "sessionId": self.app_session, "requestId": 0})
+        except OSError:
+            pass
+        self.close()
+
+    def close(self):
+        self.closed = True
+        try:
+            self.sock.close()
+        except OSError:
+            pass
+
+
+# ---- DLNA: AVTransport + RenderingControl over SOAP ------------------------------------------
+DLNA_FLAGS = "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000"
+DLNA_STREAM_FLAGS = "DLNA.ORG_OP=00;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000"
+
+
+def hms(t: float) -> str:
+    t = max(0, int(t))
+    return f"{t // 3600}:{t // 60 % 60:02d}:{t % 60:02d}"
+
+
+def parse_hms(s: str | None) -> float | None:
+    if not s or not re.match(r"^\d+:\d{1,2}:\d{1,2}", s):
+        return None
+    h, m, sec = s.split(":")[:3]
+    return int(h) * 3600 + int(m) * 60 + float(sec)
+
+
+class Dlna:
+    def __init__(self, dev: dict, on_event):
+        self.dev = dev
+        self.on_event = on_event
+        self.closed = False
+        self.volume = None
+        self.muted = None
+        threading.Thread(target=self._poll, daemon=True).start()
+
+    def soap(self, svc: str, action: str, **args) -> dict:
+        st, url = self.dev["services"].get(svc, (None, None))
+        if not url:
+            raise RuntimeError(T("The TV doesn't support {what}", what=action))
+        body = "".join(f"<{k}>{html.escape(str(v))}</{k}>" for k, v in args.items())
+        env = ('<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" '
+               's:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body>'
+               f'<u:{action} xmlns:u="{st}">{body}</u:{action}></s:Body></s:Envelope>').encode()
+        req = urllib.request.Request(url, data=env, method="POST", headers={
+            "Content-Type": 'text/xml; charset="utf-8"', "SOAPACTION": f'"{st}#{action}"'})
+        try:
+            with urllib.request.urlopen(req, timeout=8) as r:
+                root = ET.fromstring(r.read())
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", "replace")
+            m = re.search(r"<errorDescription>(.*?)</errorDescription>", detail)
+            raise RuntimeError(f"{action}: {m.group(1) if m else e.code}") from None
+        out = {}
+        for el in root.iter():
+            if el.tag.endswith("Response"):
+                for c in el:
+                    out[c.tag.split("}")[-1]] = c.text or ""
+        return out
+
+    def load(self, url: str, mime: str, title: str, sub_url: str | None = None, streaming: bool = False):
+        flags = DLNA_STREAM_FLAGS if streaming else DLNA_FLAGS
+        sub = ""
+        if sub_url:
+            sub = (f'<res protocolInfo="http-get:*:text/srt:*">{html.escape(sub_url)}</res>'
+                   f'<sec:CaptionInfoEx sec:type="srt">{html.escape(sub_url)}</sec:CaptionInfoEx>')
+        didl = ('<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" '
+                'xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:sec="http://www.sec.co.kr/">'
+                f'<item id="0" parentID="-1" restricted="1"><dc:title>{html.escape(title)}</dc:title>'
+                '<upnp:class>object.item.videoItem</upnp:class>'
+                f'<res protocolInfo="http-get:*:{mime}:{flags}">{html.escape(url)}</res>{sub}</item></DIDL-Lite>')
+        try:
+            self.soap("avt", "Stop", InstanceID=0)
+        except Exception:  # noqa: BLE001
+            pass
+        self.soap("avt", "SetAVTransportURI", InstanceID=0, CurrentURI=url, CurrentURIMetaData=didl)
+        self.soap("avt", "Play", InstanceID=0, Speed=1)
+
+    def play(self): self.soap("avt", "Play", InstanceID=0, Speed=1)
+    def pause(self): self.soap("avt", "Pause", InstanceID=0)
+    def seek(self, t: float): self.soap("avt", "Seek", InstanceID=0, Unit="REL_TIME", Target=hms(t))
+
+    def set_volume(self, level: float):
+        self.soap("rc", "SetVolume", InstanceID=0, Channel="Master", DesiredVolume=int(round(max(0, min(1, level)) * 100)))
+        self.volume = level
+
+    def set_muted(self, muted: bool):
+        self.soap("rc", "SetMute", InstanceID=0, Channel="Master", DesiredMute=1 if muted else 0)
+        self.muted = bool(muted)
+
+    def stop(self):
+        try:
+            self.soap("avt", "Stop", InstanceID=0)
+        except Exception:  # noqa: BLE001
+            pass
+        self.close()
+
+    def close(self):
+        self.closed = True
+
+    def _poll(self):
+        n = 0
+        while not self.closed:
+            try:
+                st = self.soap("avt", "GetTransportInfo", InstanceID=0).get("CurrentTransportState")
+                pos = self.soap("avt", "GetPositionInfo", InstanceID=0)
+                if n % 3 == 0 and "rc" in self.dev["services"]:
+                    try:
+                        self.volume = int(self.soap("rc", "GetVolume", InstanceID=0, Channel="Master").get("CurrentVolume") or 0) / 100
+                        self.muted = self.soap("rc", "GetMute", InstanceID=0, Channel="Master").get("CurrentMute") in ("1", "true")
+                    except Exception:  # noqa: BLE001
+                        pass
+                self.on_event({"type": "dlna", "state": st, "position": parse_hms(pos.get("RelTime")),
+                               "duration": parse_hms(pos.get("TrackDuration")), "volume": self.volume, "muted": self.muted})
+            except Exception as e:  # noqa: BLE001
+                if not self.closed:
+                    self.on_event({"type": "dlna", "pollError": str(e)})
+            n += 1
+            time.sleep(1)
+
+
+# ---- relay: a small HTTP server on the local network -----------------------------------------
+def lan_ip_for(host: str) -> str:
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect((host, 9))
+        return s.getsockname()[0]
+    finally:
+        s.close()
+
+
+class _RelayServer(http.server.ThreadingHTTPServer):
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        log("relay connection", client_address, sys.exc_info()[1])   # a TV closing a connection early: not an error
+
+
+class _RelayHandler(http.server.BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+    server_version = "Fluxy"
+
+    def log_message(self, fmt, *args):
+        pass
+
+    def cors(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+        self.send_header("Access-Control-Expose-Headers", "Content-Length, Content-Range, Content-Type")
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.cors()
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def do_GET(self):
+        self.handle_any(False)
+
+    def do_HEAD(self):
+        self.handle_any(True)
+
+    def handle_any(self, head: bool):
+        parts = self.path.split("?")[0].split("/", 3)          # '', token, kind, rest
+        route = RELAY.routes.get(parts[1]) if len(parts) > 2 else None
+        if not route:
+            self.send_error(404)
+            return
+        route.hits = getattr(route, "hits", 0) + 1
+        try:
+            route.serve(self, parts[2], parts[3] if len(parts) > 3 else "", head)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception:  # noqa: BLE001
+            log("relay", self.path, traceback.format_exc())
+            try:
+                self.send_error(502)
+            except OSError:
+                pass
+
+    def reply(self, code: int, body: bytes, ctype: str, head: bool, extra: dict | None = None):
+        self.send_response(code)
+        self.cors()
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        for k, v in (extra or {}).items():
+            self.send_header(k, v)
+        self.end_headers()
+        if not head:
+            self.wfile.write(body)
+
+
+class Relay:
+    def __init__(self):
+        self.routes: dict = {}
+        self.server = None
+        self.port = None
+        self.lock = threading.Lock()
+
+    def add(self, route) -> str:
+        with self.lock:
+            if not self.server:
+                try:      # a fixed port, so it can be opened once in the firewall
+                    self.server = _RelayServer(("0.0.0.0", RELAY_PORT), _RelayHandler)
+                except OSError:
+                    self.server = _RelayServer(("0.0.0.0", 0), _RelayHandler)
+                self.server.daemon_threads = True
+                self.port = self.server.server_address[1]
+                threading.Thread(target=self.server.serve_forever, daemon=True).start()
+                log("relay listening on port", self.port)
+            token = secrets.token_urlsafe(12)
+            self.routes[token] = route
+            route.token = token
+            return token
+
+    def remove(self, route):
+        with self.lock:
+            self.routes.pop(getattr(route, "token", None), None)
+        route.close()
+
+    def base(self, route, device_host: str) -> str:
+        return f"http://{lan_ip_for(device_host)}:{self.port}/{route.token}/"
+
+
+RELAY = Relay()
+
+
+def _sub_file(url: str, headers: dict, fmt: str) -> bytes:
+    """A whole subtitle track (HLS WebVTT playlist, .vtt, .srt…) as one WebVTT or SRT file."""
+    out = os.path.join(CACHE_DIR, f"cast-sub-{hashlib.sha1((url + fmt).encode()).hexdigest()[:16]}.{fmt}")
+    if not os.path.exists(out):
+        p = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", *ffmpeg_header_args(headers),
+                            "-extension_picky", "0", "-i", url, "-map", "0:s:0?",
+                            "-c:s", "webvtt" if fmt == "vtt" else "srt", out], capture_output=True, text=True, timeout=180)
+        if p.returncode != 0 or not os.path.exists(out):
+            raise RuntimeError((p.stderr or "ffmpeg").strip()[-300:])
+        if fmt == "srt":
+            clean_srt(out)
+    with open(out, "rb") as fh:
+        return fh.read()
+
+
+SEGMENT_TYPES = {".ts": "video/mp2t", ".m4s": "video/mp4", ".aac": "audio/aac", ".ac3": "audio/ac3",
+                 ".ec3": "audio/eac3", ".mp3": "audio/mpeg"}
+
+
+def segment_ext(playlist: str):
+    """For a media playlist, a function giving each segment its real extension: with EXT-X-MAP the segments are
+    fragmented MP4, otherwise MPEG-TS (or raw audio when the site says so). None for master playlists."""
+    if "#EXTINF" not in playlist:
+        return None
+    if "#EXT-X-MAP" in playlist:
+        return lambda url: ".m4s"
+    def ext(url):
+        e = os.path.splitext(urllib.parse.urlparse(url).path)[1].lower()
+        return e if e in (".aac", ".ac3", ".ec3", ".mp3") else ".ts"
+    return ext
+
+
+class ProxyRoute:
+    """Proxies the stream's URLs with the page's headers; HLS playlists are rewritten to point back here."""
+
+    def __init__(self, headers: dict, master: str | None = None, subs: list | None = None):
+        self.headers = headers
+        self.master = master
+        self.subs = subs or []        # [(url, headers)]
+        self.urls: list[str] = []
+        self.ids: dict = {}
+        self.types: dict = {}         # id -> Content-Type to send (some sites disguise segments as .html/.m4s)
+        self.token = None
+        self.lock = threading.Lock()
+
+    def close(self):
+        pass
+
+    def ref(self, url: str, ext: str | None = None) -> str:
+        with self.lock:
+            if url not in self.ids:
+                self.ids[url] = len(self.urls)
+                self.urls.append(url)
+            n = self.ids[url]
+        if ext is None:
+            path = urllib.parse.urlparse(url).path
+            ext = os.path.splitext(path)[1][:6] if "." in os.path.basename(path) else ""
+        else:
+            self.types[n] = SEGMENT_TYPES.get(ext)
+        return f"/{self.token}/u/{n}{ext}"
+
+    def rewrite(self, text: str, base: str) -> str:
+        seg_ext = segment_ext(text)   # media playlists: segments get their real extension, whatever the site calls them
+        out = []
+        for line in text.splitlines():
+            s = line.strip()
+            if s and not s.startswith("#"):
+                out.append(self.ref(urllib.parse.urljoin(base, s), seg_ext(urllib.parse.urljoin(base, s)) if seg_ext else None))
+            elif s.startswith("#") and 'URI="' in s:
+                out.append(re.sub(r'URI="([^"]+)"', lambda m: f'URI="{self.ref(urllib.parse.urljoin(base, m.group(1)))}"', s))
+            else:
+                out.append(line)
+        return "\n".join(out) + "\n"
+
+    def serve(self, h: _RelayHandler, kind: str, rest: str, head: bool):
+        if kind == "m":
+            return h.reply(200, (self.master or "").encode(), "application/vnd.apple.mpegurl", head)
+        if kind == "s":
+            j, fmt = rest.split(".", 1) if "." in rest else (rest, "vtt")
+            url, hdrs = self.subs[int(j)]
+            body = _sub_file(url, hdrs, "srt" if fmt == "srt" else "vtt")
+            return h.reply(200, body, "text/srt" if fmt == "srt" else "text/vtt; charset=utf-8", head)
+        if kind != "u":
+            return h.send_error(404)
+        url = self.urls[int(re.match(r"\d+", rest).group(0))]
+        req_headers = dict(self.headers)
+        if h.headers.get("Range"):
+            req_headers["Range"] = h.headers["Range"]
+        req = urllib.request.Request(url, headers={"User-Agent": UA_FALLBACK, **req_headers}, method="HEAD" if head else "GET")
+        try:
+            r = urllib.request.urlopen(req, timeout=30)
+        except urllib.error.HTTPError as e:
+            return h.reply(e.code, b"", "text/plain", head)
+        with r:
+            first = b"" if head else r.read(7)
+            if first.startswith(b"#EXTM3U"):
+                text = (first + r.read()).decode("utf-8", "replace")
+                return h.reply(200, self.rewrite(text, r.geturl()).encode(), "application/vnd.apple.mpegurl", head)
+            h.send_response(r.status)
+            h.cors()
+            forced = self.types.get(int(re.match(r"\d+", rest).group(0)))
+            if forced:
+                h.send_header("Content-Type", forced)
+            for k in ("Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"):
+                if r.headers.get(k) and not (forced and k == "Content-Type"):
+                    h.send_header(k, r.headers[k])
+            h.send_header("transferMode.dlna.org", "Streaming")
+            h.end_headers()
+            if head:
+                return
+            h.wfile.write(first)
+            while True:
+                chunk = r.read(256 * 1024)
+                if not chunk:
+                    break
+                h.wfile.write(chunk)
+
+
+class RemuxRoute:
+    """ffmpeg joins the chosen video and audio (no re-encoding) into one stream from a start position."""
+
+    def __init__(self, inputs: list, fmt: str, start: float = 0, subs: list | None = None):
+        self.inputs = inputs          # [(url, headers, ['0:v:0', ...])]
+        self.fmt = fmt                # 'mpegts' (DLNA) or 'mp4' (fragmented, Chromecast)
+        self.start = start
+        self.subs = subs or []
+        self.token = None
+        self.procs: list = []
+
+    def mime(self) -> str:
+        return "video/mp2t" if self.fmt == "mpegts" else "video/mp4"
+
+    def close(self):
+        for p in self.procs:
+            if p.poll() is None:
+                p.kill()
+
+    def serve(self, h: _RelayHandler, kind: str, rest: str, head: bool):
+        if kind == "s":
+            j, fmt = rest.split(".", 1) if "." in rest else (rest, "vtt")
+            url, hdrs = self.subs[int(j)]
+            body = _sub_file(url, hdrs, "srt" if fmt == "srt" else "vtt")
+            return h.reply(200, body, "text/srt" if fmt == "srt" else "text/vtt; charset=utf-8", head)
+        if kind != "v":
+            return h.send_error(404)
+        h.send_response(200)
+        h.cors()
+        h.send_header("Content-Type", self.mime())
+        h.send_header("transferMode.dlna.org", "Streaming")
+        h.send_header("contentFeatures.dlna.org", DLNA_STREAM_FLAGS)
+        h.send_header("Connection", "close")
+        h.end_headers()
+        h.close_connection = True
+        if head:
+            return
+        cmd = ["ffmpeg", "-nostdin", "-v", "error"]
+        maps = []
+        for i, (url, hdrs, m) in enumerate(self.inputs):
+            if self.start > 0:
+                cmd += ["-ss", f"{self.start:.3f}"]
+            cmd += [*ffmpeg_header_args(hdrs), "-i", url]
+            maps += [x for spec in m for x in ("-map", spec.replace("0:", f"{i}:", 1))]
+        cmd += [*maps, "-c", "copy", "-sn", "-dn"]
+        if self.fmt == "mp4":
+            cmd += ["-f", "mp4", "-movflags", "frag_keyframe+empty_moov+default_base_moof", "-"]
+        else:
+            cmd += ["-f", "mpegts", "-mpegts_copyts", "0", "-"]
+        log("relay remux", redact(" ".join(cmd)))
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+        self.procs.append(p)
+        try:
+            while True:
+                chunk = p.stdout.read(188 * 1024)
+                if not chunk:
+                    break
+                h.wfile.write(chunk)
+        finally:
+            if p.poll() is None:
+                p.kill()
+
+
+# ---- the cast session ------------------------------------------------------------------------
+def _ytdlp_info(url: str, headers: dict) -> dict:
+    path = info_cache_path(url)
+    if not os.path.exists(path):
+        probe_ytdlp(url, headers, "page")
+    with open(path, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _guess_mime(url: str, kind: str) -> str:
+    if kind == "hls":
+        return "application/x-mpegurl"
+    if kind == "dash":
+        return "application/dash+xml"
+    ext = os.path.splitext(urllib.parse.urlparse(url).path)[1].lower()
+    return {".webm": "video/webm", ".mkv": "video/x-matroska", ".ts": "video/mp2t", ".mov": "video/quicktime",
+            ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".aac": "audio/aac"}.get(ext, "video/mp4")
+
+
+def _hls_formats(url: str, headers: dict) -> tuple[str | None, str | None]:
+    """hlsSegmentFormat / hlsVideoSegmentFormat for the Default Media Receiver, from a media playlist."""
+    try:
+        text, final, _ = http_get(url, headers)
+    except Exception:  # noqa: BLE001
+        return None, None
+    seg = next((ln.strip() for ln in text.splitlines() if ln.strip() and not ln.startswith("#")), "")
+    ext = os.path.splitext(urllib.parse.urlparse(seg).path)[1].lower()
+    if "#EXT-X-MAP" in text:          # fragmented MP4 needs EXT-X-MAP: an .m4s name alone proves nothing
+        return "fmp4", "fmp4"
+    return {".aac": "aac", ".ac3": "ac3", ".ec3": "e_ac3", ".mp3": "mp3"}.get(ext, "ts"), "mpeg2_ts"
+
+
+class CastSession:
+    def __init__(self, sid: str, device: dict, route: str, spec: dict, twins: list | None = None, start_at: float = 0):
+        self.id = sid
+        self.device = device
+        self.mode = route                     # what the user chose: 'auto' | 'direct' | 'relay'
+        self.twins = twins or []              # the same TV under another protocol (e.g. AirScreen: Cast + DLNA)
+        # automatic route: DLNA TVs can't switch tracks when they read the original stream, so if this PC is
+        # reachable they start through the local app; otherwise the TV goes on its own first (no ports needed)
+        relay_first = route == "auto" and device["kind"] == "dlna" and firewall_status()["open"]
+        self.route = "relay" if route == "relay" or relay_first else "direct"     # what is in use now
+        self.plan = ([(device, "relay")] if relay_first else []) + [(device, "direct")] \
+            + [(t, "direct") for t in self.twins] + ([] if relay_first else [(device, "relay")])
+        self.error_code = None                # 'firewall': the TV can't reach this PC
+        self.start_at = float(start_at or 0)
+        self.tried: set = set()
+        self.spec = spec
+        self.sel = dict(spec.get("sel") or {})
+        self.headers = clean_headers(spec.get("headers") or {})
+        self.ctl = None
+        self.relay_route = None
+        self.offset = 0.0                     # remuxed streams restart from 0 at each seek
+        self.restart = False                  # True when seeking means reloading from the new position
+        self.state = "connecting"
+        self.error = None
+        self.position = 0.0
+        self.pos_at = time.time()
+        self.rate = 0.0
+        self.duration = spec.get("duration")
+        self.volume = None
+        self.muted = None
+        self.volume_fixed = False
+        self.rx_tracks: list = []             # Chromecast: tracks reported by the receiver
+        self.text_ids: dict = {}              # sub id -> Chromecast text trackId
+        self.want_audio = True                # apply the chosen audio track once the receiver lists them
+        self.stopped = False
+        self.lock = threading.Lock()
+        self.last_emit = 0
+        self.played = False                   # the TV has played something in this session
+        self.load_at = time.time()
+        self.fell_back = False                # direct failed once: switched to the relay
+        self.note = None
+
+    # -- status ----------------------------------------------------------------------------
+    def pos(self) -> float:
+        p = self.position + (time.time() - self.pos_at) * self.rate
+        return self.offset + (min(p, self.duration - self.offset) if self.duration else p)
+
+    def emit(self, force=False):
+        now = time.time()
+        if not force and now - self.last_emit < 0.9:
+            return
+        self.last_emit = now
+        send({"type": "cast", "sessionId": self.id, "state": self.state, "error": self.error, "route": self.route, "note": self.note,
+              "errorCode": self.error_code if self.error else None, "mode": self.mode,
+              "device": {k: self.device.get(k) for k in ("id", "kind", "name", "model", "host")},
+              "position": round(self.pos(), 1), "duration": self.duration, "volume": self.volume, "muted": self.muted,
+              "sel": self.sel, "caps": self.caps()})
+
+    def caps(self) -> dict:
+        cc = self.device["kind"] == "chromecast"
+        hls = self.spec["kind"] == "hls"
+        if not cc and self.route == "direct":       # a DLNA TV playing the original address: no track control
+            return {"video": False, "audio": False, "subs": False, "seek": True, "volume": not self.volume_fixed}
+        return {"video": self.restart or (hls and self.route == "relay") or (not cc and self.route == "relay"),
+                "audio": True, "subs": True, "seek": True, "volume": not self.volume_fixed}
+
+    def fallback(self) -> bool:
+        """Automatic route: the TV couldn't play before anything started. Next try, in order: the same TV under its
+        other protocol, directly (no ports needed on this PC); then through this PC."""
+        if self.mode != "auto" or self.played or self.stopped:
+            return False
+        self.tried.add((self.device["id"], self.route))
+        nxt, route = next(((d, r) for d, r in self.plan if (d["id"], r) not in self.tried), (None, None))
+        if not nxt:
+            return False
+        if nxt["id"] != self.device["id"]:
+            self.note = T("{tv} couldn't play the stream: switched to {other}.", tv=self.device["name"], other=nxt["name"])
+        elif route == "relay":
+            self.note = T("The TV couldn't play the original address: switched to the local app route.")
+        else:
+            self.note = T("The TV can't reach this PC: it now plays the stream by itself (tracks chosen by the TV).")
+        self.fell_back = True
+        at = self.pos() if self.offset or self.position else self.start_at
+        log("cast: fallback to", nxt["name"], route)
+
+        def go():
+            try:
+                if nxt["id"] != self.device["id"]:
+                    old = self.ctl
+                    old.on_event = lambda ev: None     # its "connection closed" is not news
+                    self.device, self.route = nxt, route
+                    try:
+                        old.stop()
+                    except Exception:  # noqa: BLE001
+                        pass
+                    self.connect()
+                else:
+                    self.route = route
+                self.load(at)
+            except Exception as e:  # noqa: BLE001
+                log("cast fallback", traceback.format_exc())
+                if not self.fallback():
+                    self.state, self.error = "error", str(e)
+                    self.emit(force=True)
+        self.state = "loading"
+        threading.Thread(target=go, daemon=True).start()
+        return True
+
+    def switching(self) -> bool:
+        """Errors of the failed direct attempt that arrive while the relay is starting: not shown."""
+        return self.fell_back and not self.played and self.state in ("connecting", "loading", "buffering")
+
+    def on_event(self, ev: dict):
+        t = ev.get("type")
+        if self.state == "playing":
+            self.played = True
+        if t == "media":
+            st = ev["status"]
+            ps = st.get("playerState")
+            if "currentTime" in st:
+                self.position, self.pos_at = float(st["currentTime"]), time.time()
+            self.rate = 1.0 if ps == "PLAYING" else 0.0
+            media = st.get("media") or {}
+            if media.get("duration") and not self.restart:
+                self.duration = media["duration"]
+            if media.get("tracks"):
+                self.rx_tracks = media["tracks"]
+                if self.want_audio:
+                    self.want_audio = False
+                    threading.Thread(target=self.apply_tracks, daemon=True).start()
+            if "volume" in st:
+                self.volume = st["volume"].get("level", self.volume)
+                self.muted = st["volume"].get("muted", self.muted)
+            if ps == "IDLE":
+                reason = st.get("idleReason")
+                if reason == "ERROR":
+                    if self.fallback() or self.switching():
+                        return
+                    self.state, self.error = "error", T("The TV couldn't play the stream")
+                elif reason == "FINISHED":
+                    self.state = "ended"
+                elif self.state not in ("connecting", "loading"):
+                    self.state = "idle"
+            elif ps:
+                if ps == "PLAYING":
+                    self.played, self.error = True, None
+                self.state = {"PLAYING": "playing", "PAUSED": "paused", "BUFFERING": "buffering", "LOADING": "loading"}.get(ps, self.state)
+            self.emit(force=True)
+        elif t == "receiver":
+            v = ev["status"].get("volume") or {}
+            self.volume, self.muted = v.get("level", self.volume), v.get("muted", self.muted)
+            self.volume_fixed = v.get("controlType") == "fixed"     # e.g. HDMI dongles: the TV sets the volume
+            self.emit()
+        elif t == "dlna":
+            if ev.get("pollError"):
+                return
+            st = ev.get("state")
+            mapped = {"PLAYING": "playing", "PAUSED_PLAYBACK": "paused", "TRANSITIONING": "buffering",
+                      "STOPPED": "idle", "NO_MEDIA_PRESENT": "idle"}.get(st or "", self.state)
+            if not (mapped == "idle" and self.state in ("connecting", "loading")):
+                self.state = mapped
+            if mapped == "playing":
+                self.played = True
+            # a DLNA TV that can't play the address usually just goes back to "stopped"
+            elif st == "STOPPED" and self.route == "direct" and not self.played and time.time() - self.load_at > 4 and self.fallback():
+                return
+            if ev.get("position") is not None:
+                self.position, self.pos_at = ev["position"], time.time()
+            self.rate = 1.0 if self.state == "playing" else 0.0
+            if ev.get("duration") and not self.restart:
+                self.duration = ev["duration"]
+            self.volume, self.muted = ev.get("volume", self.volume), ev.get("muted", self.muted)
+            self.emit()
+        elif t == "error":
+            if (ev.get("error") in ("LOAD_FAILED", "LOAD_CANCELLED") and self.fallback()) or self.switching():
+                return
+            self.state, self.error = "error", T("The TV reported an error: {reason}", reason=ev.get("error"))
+            self.emit(force=True)
+        elif t == "closed" and not self.stopped:
+            self.state = "idle" if not ev.get("error") else "error"
+            self.error = ev.get("error") and T("Connection to the TV lost")
+            self.emit(force=True)
+
+    # -- sources ---------------------------------------------------------------------------
+    def find(self, kind: str, tid):
+        return next((x for x in self.spec.get(kind) or [] if x.get("id") == tid), None)
+
+    def video(self):
+        return self.find("video", self.sel.get("videoId")) or (self.spec.get("video") or [None])[0]
+
+    def audio(self):
+        return self.find("audio", self.sel.get("audioId"))
+
+    def sub_sources(self) -> list:
+        """(url, headers) for every subtitle track, in the order of spec['subs']."""
+        out = []
+        info = None
+        for s in self.spec.get("subs") or []:
+            url, hdrs = s.get("url"), self.headers
+            if s.get("ytLang"):
+                info = info or _ytdlp_info(self.spec["url"], self.headers)
+                entries = (info.get("subtitles") or {}).get(s["ytLang"]) or []
+                e = next((x for x in entries if x.get("ext") == "vtt"), entries[0] if entries else {})
+                url, hdrs = e.get("url"), {**self.headers, **(e.get("http_headers") or {})}
+            out.append((url, hdrs))
+        return out
+
+    def page_inputs(self) -> list:
+        """yt-dlp pages: the chosen formats' direct URLs and headers."""
+        info = _ytdlp_info(self.spec["url"], self.headers)
+        fmts = {f["format_id"]: f for f in info.get("formats") or []}
+        v, a = self.video(), self.audio()
+        out = []
+        if v:
+            f = fmts.get(v.get("formatId") or v.get("id")) or {}
+            out.append((f.get("url") or v.get("url"), {**self.headers, **(f.get("http_headers") or {})},
+                        ["0:v:0"] + (["0:a:0?"] if not a else [])))
+        if a:
+            f = fmts.get(a.get("formatId") or a.get("id")) or {}
+            out.append((f.get("url") or a.get("url"), {**self.headers, **(f.get("http_headers") or {})}, ["0:a:0"]))
+        return out
+
+    def remux_inputs(self) -> list:
+        if self.spec["kind"] == "page":
+            return self.page_inputs()
+        v, a = self.video(), self.audio()
+        if self.spec["kind"] == "file":
+            return [((v or {}).get("url") or self.spec["url"], self.headers, ["0:v:0?", "0:a:0?"])]
+        if self.spec["kind"] == "dash":
+            return self.page_inputs()
+        out = []
+        if v:
+            out.append((v["url"], self.headers, ["0:v:0"] + (["0:a:0?"] if not a else [])))
+        if a:
+            out.append((a["url"], self.headers, ["0:a:0"]))
+        if not out:
+            out.append((self.spec["url"], self.headers, ["0:v:0?", "0:a:0?"]))
+        return out
+
+    def synth_master(self, proxy: ProxyRoute) -> str:
+        """The page's master playlist with only the chosen video variant (audio renditions kept)."""
+        text, final, _ = http_get(self.spec["url"], self.headers)
+        if "#EXT-X-STREAM-INF" not in text:
+            return proxy.rewrite(text, final)
+        v = self.video()
+        want = v.get("url") if v else None
+        variants = [urllib.parse.urljoin(final, x.strip()) for i, x in enumerate(text.splitlines())
+                    if x.strip() and not x.startswith("#") and "#EXT-X-STREAM-INF" in text.splitlines()[i - 1]]
+        if want not in variants:      # e.g. the master was redirected: match by path, else take the first one
+            path = urllib.parse.urlparse(want or "").path
+            want = next((u for u in variants if path and urllib.parse.urlparse(u).path == path), None)
+        lines, out, keep_next = text.splitlines(), [], False
+        chosen_audio = self.audio()
+        for i, line in enumerate(lines):
+            s = line.strip()
+            if s.startswith("#EXT-X-STREAM-INF"):
+                nxt = next((x.strip() for x in lines[i + 1:] if x.strip() and not x.startswith("#")), "")
+                keep_next = not want or urllib.parse.urljoin(final, nxt) == want
+                if keep_next:
+                    # the subtitle renditions are dropped below: so is the reference to their group
+                    out.append(re.sub(r',SUBTITLES="[^"]*"', "", line))
+                    want = want or "taken"
+                continue
+            if s and not s.startswith("#"):
+                if keep_next:
+                    out.append(line)
+                keep_next = False
+                continue
+            if s.startswith("#EXT-X-I-FRAME-STREAM-INF"):
+                continue
+            if s.startswith("#EXT-X-MEDIA") and "TYPE=SUBTITLES" in s:
+                continue                       # subtitles are side-loaded as WebVTT
+            if s.startswith("#EXT-X-MEDIA") and "TYPE=AUDIO" in s and chosen_audio:
+                m = re.search(r'URI="([^"]+)"', s)
+                is_chosen = m and urllib.parse.urljoin(final, m.group(1)) == chosen_audio.get("url")
+                s = re.sub(r"DEFAULT=(YES|NO)", f"DEFAULT={'YES' if is_chosen else 'NO'}", s)
+                if "DEFAULT=" not in s:
+                    s += f",DEFAULT={'YES' if is_chosen else 'NO'}"
+                out.append(s)
+                continue
+            out.append(line)
+        return proxy.rewrite("\n".join(out), final)
+
+    # -- loading ---------------------------------------------------------------------------
+    def start(self):
+        try:
+            self.connect()
+            self.load(self.start_at)
+        except Exception as e:  # noqa: BLE001
+            log("cast start", traceback.format_exc())
+            if self.fell_back or self.fallback():     # another try is already on its way
+                return
+            self.state, self.error = "error", str(e)
+            self.emit(force=True)
+
+    def connect(self):
+        if self.device["kind"] == "chromecast":
+            for attempt in range(3):          # some receivers (e.g. AirScreen) refuse a try now and then
+                try:
+                    self.ctl = CastV2(self.device["host"], self.device.get("port") or 8009, self.on_event)
+                    break
+                except (OSError, ssl.SSLError) as e:
+                    log("cast connect", self.device["host"], e)
+                    if attempt == 2:
+                        raise RuntimeError(T("Can't connect to the TV ({reason})", reason=e)) from None
+                    time.sleep(1.5)
+            self.ctl.launch()
+        else:
+            self.ctl = Dlna(self.device, self.on_event)
+
+    def new_route(self, route):
+        if self.relay_route:
+            RELAY.remove(self.relay_route)
+        self.relay_route = route
+        RELAY.add(route)
+        return RELAY.base(route, self.device["host"])
+
+    def load(self, at: float):
+        self.load_at = time.time()
+        with self.lock:
+            self.state, self.error = "loading", None
+            self.emit(force=True)
+            kind = self.spec["kind"]
+            subs = self.sub_sources() if self.spec.get("subs") else []
+            sub_j = next((j for j, s in enumerate(self.spec.get("subs") or []) if s.get("id") == self.sel.get("subId")), None)
+            if self.device["kind"] == "chromecast":
+                self.load_chromecast(at, kind, subs, sub_j)
+            else:
+                self.load_dlna(at, kind, subs, sub_j)
+
+    def load_chromecast(self, at, kind, subs, sub_j):
+        media = {"streamType": "BUFFERED", "metadata": {"metadataType": 0, "title": self.spec.get("title") or "Fluxy"}}
+        self.restart, self.offset = False, 0.0
+        if kind == "hls":
+            if self.route == "relay":
+                proxy = ProxyRoute(self.headers, subs=subs)
+                base = self.new_route(proxy)
+                proxy.master = self.synth_master(proxy)
+                url = base + "m/master.m3u8"
+            else:
+                base = ""                                        # direct: the TV needs nothing from this PC
+                url = self.spec["url"]
+            v, a = self.video(), self.audio()
+            fa, fv = _hls_formats((a or v or {}).get("url") or self.spec["url"], self.headers)
+            media.update({"contentId": url, "contentUrl": url, "contentType": "application/x-mpegurl"})
+            if fa:
+                media["hlsSegmentFormat"] = fa
+            if fv and v:
+                media["hlsVideoSegmentFormat"] = fv
+        elif self.route == "direct" and kind in ("file", "dash"):
+            url = (self.video() or {}).get("url") if kind == "file" else self.spec["url"]
+            url = url or self.spec["url"]
+            media.update({"contentId": url, "contentUrl": url, "contentType": _guess_mime(url, kind)})
+            base = ""
+        elif self.route == "direct" and kind == "page":
+            v = self.video()
+            if not (v and v.get("hasAudio")):
+                raise RuntimeError(T("This video has separate audio and video: use the local app route"))
+            url = self.page_inputs()[0][0]
+            media.update({"contentId": url, "contentUrl": url, "contentType": _guess_mime(url, "file")})
+            base = ""
+        elif kind == "file":
+            proxy = ProxyRoute(self.headers, subs=subs)
+            base = self.new_route(proxy)
+            src = (self.video() or {}).get("url") or self.spec["url"]
+            url = base.rstrip("/") + proxy.ref(src)[len(f"/{proxy.token}"):]
+            media.update({"contentId": url, "contentUrl": url, "contentType": _guess_mime(src, "file")})
+        else:
+            route = RemuxRoute(self.remux_inputs(), "mp4", at, subs=subs)
+            base = self.new_route(route)
+            url = base + "v/stream.mp4"
+            media.update({"contentId": url, "contentUrl": url, "contentType": "video/mp4"})
+            self.restart, self.offset, at = True, at, 0
+            if self.spec.get("duration"):
+                media["duration"] = max(0, self.spec["duration"] - self.offset)
+        tracks, self.text_ids = [], {}
+        for j, s in enumerate(self.spec.get("subs") or [] if base else []):   # side-loaded WebVTT (relay only)
+            tid = 100 + j
+            self.text_ids[s["id"]] = tid
+            tracks.append({"trackId": tid, "type": "TEXT", "subtype": "SUBTITLES", "trackContentId": f"{base}s/{j}.vtt",
+                           "trackContentType": "text/vtt", "language": s.get("lang") or "und",
+                           "name": (s.get("name") or s.get("lang") or "") + (" (forced)" if s.get("forced") else "")})
+        if tracks:
+            media["tracks"] = tracks
+        self.want_audio = True
+        self.position, self.pos_at, self.rate = at, time.time(), 0
+        log("cast load", self.device.get("model"), self.route, redact(json.dumps({k: v for k, v in media.items() if k != "tracks"})), "subs", len(tracks))
+        r = self.ctl.load(media, at, [100 + sub_j] if (sub_j is not None and tracks) else None)
+        log("cast load reply", (r.get("status") or [{}])[0].get("playerState"))
+        self.watch_relay()
+
+    def load_dlna(self, at, kind, subs, sub_j):
+        self.restart, self.offset = False, 0.0
+        title = self.spec.get("title") or "Fluxy"
+        if self.route == "direct":
+            if kind == "page" or kind == "dash":
+                raise RuntimeError(T("This TV can't play this stream by itself: use the local app route"))
+            url = (self.video() or {}).get("url") if kind == "file" else self.spec["url"]
+            url = url or self.spec["url"]
+            sub_url = None
+            if sub_j is not None:
+                base = self.new_route(ProxyRoute(self.headers, subs=subs))
+                sub_url = f"{base}s/{sub_j}.srt"
+            self.ctl.load(url, _guess_mime(url, kind) if kind != "hls" else "application/vnd.apple.mpegurl", title, sub_url)
+            self.watch_direct()
+        elif kind == "file":
+            proxy = ProxyRoute(self.headers, subs=subs)
+            base = self.new_route(proxy)
+            src = (self.video() or {}).get("url") or self.spec["url"]
+            url = base.rstrip("/") + proxy.ref(src)[len(f"/{proxy.token}"):]
+            self.ctl.load(url, _guess_mime(src, "file"), title, f"{base}s/{sub_j}.srt" if sub_j is not None else None)
+        else:
+            route = RemuxRoute(self.remux_inputs(), "mpegts", at, subs=subs)
+            base = self.new_route(route)
+            self.restart, self.offset, at = True, at, 0
+            self.ctl.load(base + "v/stream.ts", "video/mpeg", title, f"{base}s/{sub_j}.srt" if sub_j is not None else None, streaming=True)
+        self.position, self.pos_at, self.rate = at, time.time(), 0
+        self.watch_relay()
+        if at > 0 and not self.restart:
+            threading.Thread(target=self._seek_when_playing, args=(at,), daemon=True).start()
+
+    def watch_direct(self):
+        """DLNA direct: some renderers just stay stopped when they can't play an address."""
+        def check():
+            time.sleep(20)
+            if not self.played and self.route == "direct" and self.state in ("idle", "loading", "buffering"):
+                self.fallback()
+        threading.Thread(target=check, daemon=True).start()
+
+    def watch_relay(self):
+        """Relay route: if the TV never comes to fetch the video, say why (almost always a firewall on this PC)."""
+        route = self.relay_route
+        if self.route != "relay" or not route:
+            return
+        def check():
+            time.sleep(15)
+            if self.stopped or self.relay_route is not route or getattr(route, "hits", 0) or self.state == "playing":
+                return
+            if self.fallback():               # automatic route: let the TV play on its own
+                return
+            self.state, self.error, self.error_code = "error", firewall_hint(self.device["host"]), "firewall"
+            log("cast: the TV never fetched the relay", self.device["host"])
+            self.emit(force=True)
+        threading.Thread(target=check, daemon=True).start()
+
+    def _seek_when_playing(self, at: float):
+        for _ in range(30):
+            if self.state == "playing":
+                try:
+                    self.ctl.seek(at)
+                except Exception as e:  # noqa: BLE001
+                    log("dlna seek", e)
+                return
+            time.sleep(0.5)
+
+    def apply_tracks(self):
+        """Chromecast: turn on the chosen audio (by language/name) and subtitle tracks."""
+        ids = []
+        a = self.audio()
+        if a:
+            audio_tracks = [x for x in self.rx_tracks if x.get("type") == "AUDIO"]
+            lang = (a.get("lang") or "").lower().split("-")[0]
+            hit = next((x for x in audio_tracks if (x.get("name") or "") == (a.get("name") or "") and (x.get("language") or "").lower().startswith(lang)), None) \
+                or next((x for x in audio_tracks if lang and (x.get("language") or "").lower().startswith(lang)), None)
+            if hit:
+                ids.append(hit["trackId"])
+        sid = self.sel.get("subId")
+        if sid in self.text_ids:
+            ids.append(self.text_ids[sid])
+        elif sid:      # direct route: the subtitle tracks the receiver found in the playlist
+            want = self.find("subs", sid) or {}
+            lang = (want.get("lang") or "").lower().split("-")[0]
+            text = [x for x in self.rx_tracks if x.get("type") == "TEXT"]
+            hit = next((x for x in text if (x.get("name") or "") == (want.get("name") or "") and (x.get("language") or "").lower().startswith(lang)), None) \
+                or next((x for x in text if lang and (x.get("language") or "").lower().startswith(lang)), None)
+            if hit:
+                ids.append(hit["trackId"])
+        if ids or self.text_ids or any(x.get("type") == "TEXT" for x in self.rx_tracks):
+            self.ctl.set_tracks(ids)
+
+    # -- commands from the extension -------------------------------------------------------
+    def control(self, action: str, value=None):
+        if action == "stop":
+            return self.stop()
+        if action == "play":
+            self.ctl.play()
+        elif action == "pause":
+            self.ctl.pause()
+        elif action in ("seek", "seekBy"):
+            t = float(value or 0) + (self.pos() if action == "seekBy" else 0)
+            t = max(0.0, min(t, (self.duration or t + 1) - 1))
+            if self.restart:
+                self.load(t)
+            else:
+                self.ctl.seek(t)
+                self.position, self.pos_at = t, time.time()
+        elif action == "volume":
+            self.ctl.set_volume(float(value))
+            self.volume = float(value)
+        elif action == "mute":
+            self.ctl.set_muted(bool(value))
+            self.muted = bool(value)
+        self.emit(force=True)
+
+    def select(self, kind: str, tid):
+        key = {"video": "videoId", "audio": "audioId", "sub": "subId"}[kind]
+        self.sel[key] = tid
+        cc = self.device["kind"] == "chromecast"
+        if cc and not self.restart and kind in ("audio", "sub") and (self.spec["kind"] == "hls" or kind == "sub"):
+            self.apply_tracks()
+            self.emit(force=True)
+            return
+        self.load(self.pos())
+
+    def stop(self):
+        self.stopped = True
+        try:
+            if self.ctl:
+                self.ctl.stop()
+        finally:
+            if self.relay_route:
+                RELAY.remove(self.relay_route)
+                self.relay_route = None
+            self.state = "stopped"
+            self.emit(force=True)
+            for f in glob.glob(os.path.join(CACHE_DIR, "cast-sub-*")):     # converted subtitles
+                try:
+                    os.remove(f)
+                except OSError:
+                    pass
+            if CAST.get("session") is self:
+                CAST["session"] = None
+
+    def active(self) -> bool:
+        return not self.stopped and self.state not in ("idle", "ended", "error", "stopped")
+
+
+def _lan_net() -> str:
+    ip = lan_ip_for("192.168.0.1")      # the interface towards the home network
+    return ".".join(ip.split(".")[:3]) + ".0/24"
+
+
+def firewall_status() -> dict:
+    """Which firewall guards this PC and whether the relay port is already allowed (best effort, no root)."""
+    port = str(RELAY_PORT)
+    try:
+        with open("/etc/ufw/ufw.conf", encoding="utf-8") as fh:
+            ufw_on = re.search(r"^ENABLED=yes", fh.read(), re.M) is not None
+    except OSError:
+        ufw_on = False
+    if ufw_on:
+        try:
+            with open("/etc/ufw/user.rules", encoding="utf-8") as fh:
+                rules = fh.read()
+            allowed = re.search(rf"--dports? (?:\S*,)?{port}\b", rules) is not None
+        except OSError:
+            allowed = False
+        return {"firewall": "ufw", "open": allowed}
+    if shutil.which("firewall-cmd"):
+        try:
+            st = subprocess.run(["firewall-cmd", "--state"], capture_output=True, text=True, timeout=5)
+            if st.stdout.strip() == "running":
+                ls = subprocess.run(["firewall-cmd", "--list-all"], capture_output=True, text=True, timeout=5).stdout
+                return {"firewall": "firewalld", "open": f"{port}/tcp" in ls or f'port="{port}"' in ls}
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return {"firewall": None, "open": True}
+
+
+def allow_relay_port() -> dict:
+    """Opens the relay port to the home network, asking the system password in its own window (pkexec)."""
+    fw = firewall_status()
+    if fw["open"]:
+        return {"ok": True, **fw}
+    if not shutil.which("pkexec"):
+        return {"ok": False, "error": T("This system can't ask for the password here: {cmd}", cmd=firewall_hint("192.168.1.1")), **fw}
+    port, net = RELAY_PORT, _lan_net()
+    if fw["firewall"] == "ufw":
+        cmd = ["pkexec", "ufw", "allow", "from", net, "to", "any", "port", str(port), "proto", "tcp", "comment", "Fluxy cast"]
+    else:
+        rule = f"rule family=ipv4 source address={net} port port={port} protocol=tcp accept"
+        cmd = ["pkexec", "sh", "-c", f"firewall-cmd --permanent --add-rich-rule='{rule}' && firewall-cmd --reload"]
+    log("firewall: asking", " ".join(cmd))
+    p = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    if p.returncode in (126, 127) and "dismissed" in (p.stderr + p.stdout).lower() or p.returncode == 126:
+        return {"ok": False, "cancelled": True, **fw}
+    if p.returncode != 0:
+        return {"ok": False, "error": (p.stderr or p.stdout).strip()[-300:] or f"exit {p.returncode}", **fw}
+    return {"ok": True, **firewall_status()}
+
+
+def firewall_hint(device_host: str) -> str:
+    port = RELAY.port or RELAY_PORT
+    net = ".".join(lan_ip_for(device_host).split(".")[:3]) + ".0/24"
+    msg = T("The TV can't reach this PC on port {port}: a firewall is probably blocking it.", port=port)
+    if shutil.which("ufw") or os.path.exists("/etc/ufw/ufw.conf"):
+        msg += " " + T("With ufw: {cmd}", cmd=f"sudo ufw allow from {net} to any port {port} proto tcp")
+    elif shutil.which("firewall-cmd"):
+        msg += " " + T("With firewalld: {cmd}", cmd=f"sudo firewall-cmd --permanent --add-port={port}/tcp && sudo firewall-cmd --reload")
+    return msg
+
+
+def cast_ticker():
+    """Position updates while playing (the TVs report it only now and then)."""
+    while True:
+        time.sleep(1)
+        s = CAST.get("session")
+        if s and not s.stopped and s.state == "playing":
+            s.emit()
+
+
+def cast_handle(msg: dict):
+    t = msg.get("type")
+    rid = msg.get("id")
+    if t == "castDiscover":
+        def work():
+            try:
+                devs = discover(float(msg.get("timeout") or 3))
+                send({"type": "castDevices", "id": rid, "ok": True, "devices": [public_device(d) for d in devs]})
+            except Exception as e:  # noqa: BLE001
+                send({"type": "castDevices", "id": rid, "ok": False, "error": str(e)})
+        threading.Thread(target=work, daemon=True).start()
+    elif t == "castFirewall":
+        def work():
+            try:
+                r = allow_relay_port() if msg.get("allow") else {"ok": True, **firewall_status()}
+            except Exception as e:  # noqa: BLE001
+                r = {"ok": False, "error": str(e)}
+            send({"type": "castFirewall", "id": rid, **r})
+        threading.Thread(target=work, daemon=True).start()
+    elif t == "castAddDevice":
+        def work():
+            try:
+                dev = add_device(msg.get("address") or "")
+                send({"type": "castDevices", "id": rid, "ok": True, "devices": [public_device(dev)]})
+            except Exception as e:  # noqa: BLE001
+                send({"type": "castDevices", "id": rid, "ok": False, "error": T("No TV answers at {address}", address=msg.get("address")) + f" ({e})"})
+        threading.Thread(target=work, daemon=True).start()
+    elif t == "castStart":
+        dev = DEVICES.get(msg.get("deviceId")) or (msg.get("device") if (msg.get("device") or {}).get("kind") in ("chromecast", "dlna") else None)
+        if dev and dev["kind"] == "dlna" and dev.get("services"):
+            dev = {**dev, "services": {k: tuple(v) for k, v in dev["services"].items()}}
+        if not dev:
+            send({"type": "cast", "sessionId": msg.get("sessionId"), "state": "error", "error": T("TV not found: search again")})
+            return
+        old = CAST.get("session")
+        if old:
+            threading.Thread(target=old.stop, daemon=True).start()
+        twins = []
+        for tw in msg.get("twins") or []:
+            if tw.get("kind") == "dlna" and tw.get("services"):
+                twins.append({**tw, "services": {k: tuple(v) for k, v in tw["services"].items()}})
+            elif tw.get("kind") == "chromecast":
+                twins.append(tw)
+        s = CastSession(msg["sessionId"], dev, msg.get("route") or "auto", msg["spec"], twins, msg.get("startAt") or 0)
+        CAST["session"] = s
+        threading.Thread(target=s.start, daemon=True).start()
+    elif t in ("castControl", "castSelect"):
+        s = CAST.get("session")
+        if not s or s.id != msg.get("sessionId"):
+            send({"type": "cast", "sessionId": msg.get("sessionId"), "state": "stopped"})
+            return
+        def work():
+            try:
+                if t == "castControl":
+                    s.control(msg.get("action"), msg.get("value"))
+                else:
+                    s.select(msg.get("kind"), msg.get("trackId"))
+            except Exception as e:  # noqa: BLE001
+                log("cast command", traceback.format_exc())
+                s.error = str(e)
+                s.emit(force=True)
+        threading.Thread(target=work, daemon=True).start()
+
+
 def tool_version(name, args):
     try:
         return subprocess.run([name, *args], capture_output=True, text=True, timeout=10).stdout.splitlines()[0]
@@ -1073,6 +2671,8 @@ def handle(msg: dict):
               "ytdlp": tool_version("yt-dlp", ["--version"]),
               "cryptodome": env["cryptodome"], "ytdlpVariant": env["variant"],
               "hints": install_hints(env)})
+    elif t and t.startswith("cast"):
+        cast_handle(msg)
     elif t == "probe":
         def work():
             try:
@@ -1139,6 +2739,7 @@ def main():
         print(json.dumps(probe(sys.argv[2], {k.strip(): v.strip() for k, v in hdrs.items()}), indent=2))
         return
     log("host started", VERSION)
+    threading.Thread(target=cast_ticker, daemon=True).start()
     while True:
         msg = read_message()
         if msg is None:
@@ -1150,7 +2751,8 @@ def main():
     # Browser closed the port: let running downloads finish (paused ones too).
     for job in list(JOBS.values()):
         job.resume()
-    while JOBS:
+    # ...and keep relaying to the TV while a cast is playing
+    while JOBS or (CAST.get("session") and CAST["session"].active()):
         time.sleep(1)
     log("host exit")
 

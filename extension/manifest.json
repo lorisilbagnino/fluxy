@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "__MSG_extName__",
   "short_name": "Fluxy",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "__MSG_extDescription__",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApnJsRnvlQOC/jS6aPFxwHdV2ACToCq6dpYSTlXo0e78JosdegWsJOKX7o3BNHl1TYXmyacY4D8OVylf+Xe+PLimHZL1OnQqgqFLOAJiDDlU1Kl6x3sU6bqXb3hS5kuiMDmr4eWxdz8BLk/2uW54Ppp4ngmW+rGEpZj6lv4m1pyKS2gZXbBg2MzyHQoBwYAFU2irZ/s9QkmnyQXanOZfmd5U7SgqgThxhjTc0/ts/IJuzv6nBqnBj+kT5miIse9JqrK2YN4sQ44E8StxIs/Wtke2rglAnaouaHW1hmBevoLphzywGSO1yPPcJWQlA0/nbDGeUMytsQxmKt816EPF1TwIDAQAB",
   "minimum_chrome_version": "116",

@@ -106,6 +106,38 @@ con *Rileva*.
 - Motore nel browser: durante il lavoro serve circa **2× la dimensione del film** su disco (controllato prima di
   iniziare).
 
+## Trasmettere alla TV (app locale)
+
+Ogni scheda di stream ha il selettore **Scarica | Trasmetti**. In modalità *Trasmetti* scegli la qualità video,
+**una** traccia audio e **un** sottotitolo (o nessuno), poi la TV e il percorso, e premi **Trasmetti alla TV**.
+Durante la trasmissione il popup mostra lo **stream manager** al posto dei download (play/pausa, −10 s / +30 s,
+posizione, volume e muto, cambio di video/audio/sottotitoli, stop); la pagina di Fluxy ha lo stesso pannello nella
+scheda **Trasmissione**, con l'elenco delle TV, "cerca di nuovo" e "aggiungi per indirizzo".
+
+| | Chromecast / Google TV | TV DLNA |
+|---|---|---|
+| Ricerca | mDNS (`_googlecast._tcp`, UDP 5353) | SSDP (UDP 1900) |
+| Controllo | Cast v2 (TLS, porta 8009), Default Media Receiver di Google | UPnP AVTransport + RenderingControl (SOAP) |
+| Percorso **diretto** | la TV carica l'URL originale (HLS/DASH/file) | la TV carica l'URL originale (HLS/file) |
+| **Tramite app locale** | HLS: master con la variante scelta, inoltrata con gli header della pagina e CORS; file: inoltrati con Range; DASH/pagine yt-dlp: rimuxati in MP4 frammentato | tutto rimuxato da ffmpeg (copia dei flussi) in MPEG-TS; file inoltrati con Range |
+| Audio / sottotitoli | cambio al volo (tracce del ricevitore; sottotitoli caricati come WebVTT) | ricarica dalla posizione attuale; sottotitoli SRT (`CaptionInfoEx` Samsung) |
+
+- Tutto passa dall'app locale (`fluxy_host.py`, solo libreria standard): le estensioni Chrome non possono caricare
+  l'SDK Cast di Google (il codice remoto è vietato in MV3, anche fuori dallo store) e Firefox non supporta Cast.
+- Percorsi: **automatico** (predefinito) prova prima la TV da sola, così sul PC non c'è niente da aprire; poi la
+  stessa TV con l'altro protocollo (AirScreen e app simili sono sia Chromecast sia ricevitore DLNA, con player
+  diversi); solo per ultimo l'inoltro. Il dispositivo che funziona diventa la scelta successiva. Il *diretto* da solo è
+  più leggero ma alcuni siti o player lo rifiutano; *tramite app locale* passa gli header della pagina, sistema CORS e
+  segmenti con nomi travestiti (es. MPEG-TS serviti come `.html`/`.m4s`) e permette di scegliere le tracce su ogni TV.
+  Con gli stream rimuxati la ricerca riavvia ffmpeg dalla nuova posizione. **↻** ritrasmette subito dalla posizione
+  attuale.
+- **Firewall**: la ricerca usa UDP 5353 e 1900; con l'inoltro la TV si collega a questo PC sulla **porta TCP 8790**
+  (si cambia con `FLUXY_RELAY_PORT`). Se una TV non compare, aggiungila per indirizzo (IP del Chromecast o URL di
+  descrizione DLNA).
+- Le versioni store trasmettono tutto tranne YouTube; quelle su GitHub anche YouTube e gli altri siti di yt-dlp.
+- Non supportati: Miracast (duplicazione dello schermo del sistema operativo, non raggiungibile da un'app), AirPlay e le
+  app con protocolli non documentati (es. Web Video Caster). Fire TV funziona tramite un'app ricevitore DLNA.
+
 ### Non sovraccaricare i siti
 
 Alcuni provider bloccano l'indirizzo IP, a volte per giorni, se ricevono troppe richieste insieme. Le impostazioni

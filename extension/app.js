@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 lorisilbagnino — Fluxy, https://github.com/lorisilbagnino/fluxy (see ADDITIONAL-TERMS.md)
-// The Fluxy page: download history (persistent), settings (same form as the popup), about.
+// The Fluxy page: download history (persistent), stream manager (casting), settings (same form as the popup), about.
 
-import { t, UI_LANG, translate, $, send, renderJob, sortJobs, setRerender, restoreEditFocus, renderOverall, speedLimitControl } from './ui.js';
+import { t, UI_LANG, translate, $, send, el, renderJob, sortJobs, setRerender, restoreEditFocus, renderOverall, speedLimitControl } from './ui.js';
 import { mountSettings } from './settings.js';
 import { DONATE_URL } from './build-flags.js';
+import { castShown, mountCastManager, deviceLabel, routePicker, routeHelp } from './cast-ui.js';
 
 // ---- tabs (URL hash) ----------------------------------------------------------------
-const TABS = ['downloads', 'settings', 'about'];
+const TABS = ['downloads', 'cast', 'settings', 'about'];
 function showTab() {
   const tab = TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'downloads';
   for (const name of TABS) {
@@ -16,7 +17,9 @@ function showTab() {
     link.setAttribute('aria-selected', String(name === tab));
     link.classList.toggle('on', name === tab);
   }
-  if (tab === 'settings') send({ type: 'hostCheck' });
+  if (tab === 'settings' || tab === 'cast') send({ type: 'hostCheck' });
+  if (tab === 'cast' && !castDevices?.at && !castDevices?.searching) send({ type: 'castDiscover' });
+  if (tab === 'cast') checkFirewall().catch(() => {});
 }
 window.addEventListener('hashchange', showTab);
 
@@ -52,6 +55,65 @@ $('#btn-clear').addEventListener('click', async () => {
   await send({ type: 'clearFinished' });
 });
 
+// ---- cast: stream manager + TVs ----------------------------------------------------------
+let castState = null;
+let castDevices = null;
+let castPrefs = null;
+let hostState = null;
+function renderCastTab() {
+  const shown = castShown(castState);
+  $('#cast-empty').hidden = shown;
+  if (!shown) $('#cast-now').replaceChildren();
+  else mountCastManager($('#cast-now'), castState, { full: true });
+  const noApp = hostState?.status && hostState.status !== 'ok';
+  $('#cast-noapp').hidden = !noApp;
+  $('#cast-noapp').textContent = noApp ? t('castNeedsApp') : '';
+  const list = castDevices?.devices || [];
+  const save = (patch) => chrome.storage.local.set({ castPrefs: { route: 'auto', ...castPrefs, ...patch, v: 2 } });
+  $('#btn-cast-search').disabled = !!castDevices?.searching || noApp;
+  $('#btn-cast-search').textContent = castDevices?.searching ? t('castSearching') : t('castSearch');
+  $('#cast-devices').replaceChildren(...[
+    ...list.map((d) => el('label', { class: `cast-device-row${d.id === castPrefs?.deviceId ? ' on' : ''}` },
+      el('input', { type: 'radio', name: 'cast-dev', checked: d.id === castPrefs?.deviceId, onchange: () => save({ deviceId: d.id }) }),
+      el('span', { class: 'main' }, deviceLabel(d)),
+      el('span', { class: 'muted' }, [d.model, d.host, d.manual ? t('castManual') : null].filter(Boolean).join(' · ')))),
+    !list.length ? el('p', { class: 'muted' }, castDevices?.searching ? t('castSearching') : castDevices?.at ? t('castNoneFound') : t('castNoDevices')) : null,
+    castDevices?.error ? el('p', { class: 'err' }, castDevices.error) : null,
+    el('div', { class: 'cast-route-row' }, el('span', {}, t('castRouteLabel')), routePicker(castPrefs, { onChange: save }),
+      el('small', { class: 'muted' }, routeHelp(castPrefs?.route || 'auto'))),
+  ].filter(Boolean));
+}
+// firewall of this PC (Linux): shown with the one-click permission when the relay port is closed
+let firewall = null;
+async function checkFirewall(allowIt = false) {
+  const r = await send({ type: 'castFirewall', allow: allowIt });
+  firewall = r && !r.error ? r : { ...firewall, error: r?.error };
+  if (allowIt && r?.cancelled) firewall.msg = t('castAllowCancelled');
+  renderFirewall();
+}
+function renderFirewall() {
+  const box = $('#cast-firewall');
+  const closed = firewall?.firewall && !firewall.open;
+  box.hidden = !closed && !firewall?.error;
+  box.replaceChildren(...[
+    el('span', {}, closed ? t('castFirewallClosed', firewall.firewall) : ''),
+    closed ? el('button', { class: 'ghost', onclick: async (e) => { e.target.disabled = true; e.target.textContent = t('castAllowWaiting'); await checkFirewall(true); } }, `🔓 ${t('castAllow')}`) : null,
+    firewall?.msg ? el('small', { class: 'muted' }, firewall.msg) : null,
+    firewall?.error ? el('small', { class: 'err' }, firewall.error) : null,
+  ].filter(Boolean));
+}
+$('#cast-address').placeholder = t('castAddPlaceholder');
+$('#btn-cast-search').addEventListener('click', () => send({ type: 'castDiscover' }));
+$('#cast-add').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const address = $('#cast-address').value.trim();
+  if (!address) return;
+  const r = await send({ type: 'castAddDevice', address });
+  $('#cast-add-error').hidden = !r?.error;
+  $('#cast-add-error').textContent = r?.error || '';
+  if (!r?.error) $('#cast-address').value = '';
+});
+
 // ---- init -------------------------------------------------------------------------------
 document.documentElement.lang = UI_LANG;
 translate();
@@ -67,6 +129,16 @@ showTab();
 $('#speed-limit').replaceWith(speedLimitControl());
 await mountSettings($('#settings-body'));
 render((await chrome.storage.local.get('jobs')).jobs);
+({ cast: castState, castDevices, host: hostState } = await chrome.storage.session.get(['cast', 'castDevices', 'host']));
+castPrefs = (await chrome.storage.local.get('castPrefs')).castPrefs || null;
+if (!castDevices) castDevices = { devices: (await chrome.storage.local.get('castKnown')).castKnown || [] };
+renderCastTab();
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.jobs) render(changes.jobs.newValue);
+  if (area === 'local' && changes.castPrefs) { castPrefs = changes.castPrefs.newValue; renderCastTab(); }
+  if (area !== 'session') return;
+  if (changes.cast) castState = changes.cast.newValue || null;
+  if (changes.castDevices) castDevices = changes.castDevices.newValue || null;
+  if (changes.host) hostState = changes.host.newValue || null;
+  if (changes.cast || changes.castDevices || changes.host) renderCastTab();
 });
