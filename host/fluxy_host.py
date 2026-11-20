@@ -173,6 +173,8 @@ def clean_headers(headers: dict | None) -> dict:
 
 def http_get(url: str, headers: dict, timeout=20) -> tuple[str, str, str]:
     """Returns (text, final_url, content_type)."""
+    if not any(k.lower() == "user-agent" for k in headers):
+        headers = {**headers, "User-Agent": UA_FALLBACK}     # some sites refuse Python's own
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         data = resp.read(20 * 1024 * 1024)
