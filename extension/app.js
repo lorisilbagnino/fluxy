@@ -111,6 +111,7 @@ await mountSettings($('#settings-body'));
 render((await chrome.storage.local.get('jobs')).jobs);
 ({ cast: castState, castDevices, host: hostState } = await chrome.storage.session.get(['cast', 'castDevices', 'host']));
 castPrefs = (await chrome.storage.local.get('castPrefs')).castPrefs || null;
+if (!castDevices) castDevices = { devices: (await chrome.storage.local.get('castKnown')).castKnown || [] };
 renderCastTab();
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.jobs) render(changes.jobs.newValue);

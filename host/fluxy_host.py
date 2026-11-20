@@ -127,6 +127,7 @@ TEXT = {
         "No TV answers at {address}": "Nessuna TV risponde all'indirizzo {address}",
         "The TV can't reach this PC on port {port}: a firewall is probably blocking it.": "La TV non riesce a collegarsi a questo PC sulla porta {port}: probabilmente la blocca un firewall.",
         "With ufw: {cmd}": "Con ufw: {cmd}",
+        "The TV couldn't play the original address: switched to the local app route.": "La TV non è riuscita a riprodurre l'indirizzo originale: passata al percorso tramite app locale.",
         "With firewalld: {cmd}": "Con firewalld: {cmd}",
         "Can't connect to the TV ({reason})": "Impossibile collegarsi alla TV ({reason})",
         "Downloading {n} tracks": "Download di {n} tracce in parallelo",
@@ -1337,7 +1338,7 @@ def add_device(address: str) -> dict:
 
 
 def public_device(d: dict) -> dict:
-    return {k: d.get(k) for k in ("id", "kind", "name", "model", "host", "audioOnly")}
+    return {k: d.get(k) for k in ("id", "kind", "name", "model", "host", "port", "audioOnly", "services")}
 
 
 # ---- Chromecast: Cast v2 over TLS, protobuf CastMessage written by hand ---------------------
@@ -1998,6 +1999,9 @@ class CastSession:
         self.stopped = False
         self.lock = threading.Lock()
         self.last_emit = 0
+        self.played = False                   # the TV has played something in this session
+        self.fell_back = False                # direct failed once: switched to the relay
+        self.note = None
 
     # -- status ----------------------------------------------------------------------------
     def pos(self) -> float:
@@ -2009,7 +2013,7 @@ class CastSession:
         if not force and now - self.last_emit < 0.9:
             return
         self.last_emit = now
-        send({"type": "cast", "sessionId": self.id, "state": self.state, "error": self.error,
+        send({"type": "cast", "sessionId": self.id, "state": self.state, "error": self.error, "route": self.route, "note": self.note,
               "position": round(self.pos(), 1), "duration": self.duration, "volume": self.volume, "muted": self.muted,
               "sel": self.sel, "caps": self.caps()})
 
@@ -2019,8 +2023,25 @@ class CastSession:
         return {"video": self.restart or (hls and self.route == "relay") or (not cc and self.route == "relay"),
                 "audio": True, "subs": True, "seek": True, "volume": not self.volume_fixed}
 
+    def fallback(self) -> bool:
+        """Direct route refused by the TV before playing anything: try once through this PC."""
+        if self.route != "direct" or self.played or self.fell_back or self.stopped:
+            return False
+        self.fell_back = True
+        self.route = "relay"
+        self.note = T("The TV couldn't play the original address: switched to the local app route.")
+        log("cast: direct failed, falling back to the relay")
+        threading.Thread(target=self.load, args=(self.pos() if self.offset or self.position else 0,), daemon=True).start()
+        return True
+
+    def switching(self) -> bool:
+        """Errors of the failed direct attempt that arrive while the relay is starting: not shown."""
+        return self.fell_back and not self.played and self.state in ("connecting", "loading", "buffering")
+
     def on_event(self, ev: dict):
         t = ev.get("type")
+        if self.state == "playing":
+            self.played = True
         if t == "media":
             st = ev["status"]
             ps = st.get("playerState")
@@ -2041,12 +2062,16 @@ class CastSession:
             if ps == "IDLE":
                 reason = st.get("idleReason")
                 if reason == "ERROR":
+                    if self.fallback() or self.switching():
+                        return
                     self.state, self.error = "error", T("The TV couldn't play the stream")
                 elif reason == "FINISHED":
                     self.state = "ended"
                 elif self.state not in ("connecting", "loading"):
                     self.state = "idle"
             elif ps:
+                if ps == "PLAYING":
+                    self.played, self.error = True, None
                 self.state = {"PLAYING": "playing", "PAUSED": "paused", "BUFFERING": "buffering", "LOADING": "loading"}.get(ps, self.state)
             self.emit(force=True)
         elif t == "receiver":
@@ -2062,6 +2087,8 @@ class CastSession:
                       "STOPPED": "idle", "NO_MEDIA_PRESENT": "idle"}.get(st or "", self.state)
             if not (mapped == "idle" and self.state in ("connecting", "loading")):
                 self.state = mapped
+            if mapped == "playing":
+                self.played = True
             if ev.get("position") is not None:
                 self.position, self.pos_at = ev["position"], time.time()
             self.rate = 1.0 if self.state == "playing" else 0.0
@@ -2070,6 +2097,8 @@ class CastSession:
             self.volume, self.muted = ev.get("volume", self.volume), ev.get("muted", self.muted)
             self.emit()
         elif t == "error":
+            if (ev.get("error") in ("LOAD_FAILED", "LOAD_CANCELLED") and self.fallback()) or self.switching():
+                return
             self.state, self.error = "error", T("The TV reported an error: {reason}", reason=ev.get("error"))
             self.emit(force=True)
         elif t == "closed" and not self.stopped:
@@ -2196,6 +2225,8 @@ class CastSession:
             self.load(0)
         except Exception as e:  # noqa: BLE001
             log("cast start", traceback.format_exc())
+            if self.fell_back:            # the relay attempt is already on its way
+                return
             self.state, self.error = "error", str(e)
             self.emit(force=True)
 
@@ -2292,6 +2323,7 @@ class CastSession:
                 base = self.new_route(ProxyRoute(self.headers, subs=subs))
                 sub_url = f"{base}s/{sub_j}.srt"
             self.ctl.load(url, _guess_mime(url, kind) if kind != "hls" else "application/vnd.apple.mpegurl", title, sub_url)
+            self.watch_direct()
         elif kind == "file":
             proxy = ProxyRoute(self.headers, subs=subs)
             base = self.new_route(proxy)
@@ -2307,6 +2339,14 @@ class CastSession:
         self.watch_relay()
         if at > 0 and not self.restart:
             threading.Thread(target=self._seek_when_playing, args=(at,), daemon=True).start()
+
+    def watch_direct(self):
+        """DLNA direct: some renderers just stay stopped when they can't play an address."""
+        def check():
+            time.sleep(20)
+            if not self.played and self.route == "direct" and self.state in ("idle", "loading", "buffering"):
+                self.fallback()
+        threading.Thread(target=check, daemon=True).start()
 
     def watch_relay(self):
         """Relay route: if the TV never comes to fetch the video, say why (almost always a firewall on this PC)."""
@@ -2454,7 +2494,9 @@ def cast_handle(msg: dict):
                 send({"type": "castDevices", "id": rid, "ok": False, "error": T("No TV answers at {address}", address=msg.get("address")) + f" ({e})"})
         threading.Thread(target=work, daemon=True).start()
     elif t == "castStart":
-        dev = DEVICES.get(msg.get("deviceId"))
+        dev = DEVICES.get(msg.get("deviceId")) or (msg.get("device") if (msg.get("device") or {}).get("kind") in ("chromecast", "dlna") else None)
+        if dev and dev["kind"] == "dlna" and dev.get("services"):
+            dev = {**dev, "services": {k: tuple(v) for k, v in dev["services"].items()}}
         if not dev:
             send({"type": "cast", "sessionId": msg.get("sessionId"), "state": "error", "error": T("TV not found: search again")})
             return

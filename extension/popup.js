@@ -493,7 +493,7 @@ async function init() {
 
   const key = `tab:${tabId}`;
   const data = await chrome.storage.session.get([key, 'host', 'armed', 'cast', 'castDevices']);
-  castDevices = data.castDevices || null;
+  castDevices = data.castDevices || { devices: (await chrome.storage.local.get('castKnown')).castKnown || [] };
   castPrefs = (await chrome.storage.local.get('castPrefs')).castPrefs || null;
   castState = data.cast || null;
   const { jobs } = await chrome.storage.local.get('jobs');

@@ -450,12 +450,15 @@ async function castDiscover() {
   try {
     const r = await hostRequest({ type: 'castDiscover', timeout: 3 }, 25_000);
     if (!r.ok) throw new Error(r.error || 'discovery failed');
-    const prev = (await chrome.storage.session.get('castDevices')).castDevices?.devices || [];
-    // keep the TVs added by address: the discovery can't see them
-    const manual = prev.filter((d) => d.manual && !r.devices.some((x) => x.id === d.id || x.host === d.host));
-    await setDevices({ devices: [...r.devices, ...manual], at: Date.now(), searching: false });
+    // TVs found before stay listed (DLNA answers are often lost, e.g. behind a firewall), marked as not seen now
+    const { castKnown = [] } = await chrome.storage.local.get('castKnown');
+    const seen = r.devices.map((d) => ({ ...d, seenAt: Date.now() }));
+    const older = castKnown.filter((d) => !seen.some((x) => x.id === d.id || (x.host === d.host && x.kind === d.kind && d.manual)))
+      .map((d) => ({ ...d, stale: true }));
+    const all = [...seen, ...older];
+    await chrome.storage.local.set({ castKnown: all.map(({ stale, ...d }) => d) });
+    await setDevices({ devices: all, at: Date.now(), searching: false });
     const { castPrefs } = await chrome.storage.local.get('castPrefs');
-    const all = [...r.devices, ...manual];
     if (all.length && !all.some((d) => d.id === castPrefs?.deviceId)) {
       const best = all.find((d) => !d.audioOnly) || all[0];
       await chrome.storage.local.set({ castPrefs: { route: 'relay', ...castPrefs, deviceId: best.id } });
@@ -468,9 +471,11 @@ async function castDiscover() {
 async function castAddDevice(address) {
   const r = await hostRequest({ type: 'castAddDevice', address }, 20_000);
   if (!r.ok) throw new Error(r.error);
-  const dev = { ...r.devices[0], manual: true };
+  const dev = { ...r.devices[0], manual: true, seenAt: Date.now() };
   const prev = (await chrome.storage.session.get('castDevices')).castDevices?.devices || [];
   await setDevices({ devices: [...prev.filter((d) => d.id !== dev.id), dev], at: Date.now(), error: null });
+  const { castKnown = [] } = await chrome.storage.local.get('castKnown');
+  await chrome.storage.local.set({ castKnown: [...castKnown.filter((d) => d.id !== dev.id), dev] });
   const { castPrefs } = await chrome.storage.local.get('castPrefs');
   await chrome.storage.local.set({ castPrefs: { route: 'relay', ...castPrefs, deviceId: dev.id } });
   return dev;
@@ -493,7 +498,8 @@ async function castStart({ tabId, streamId, videoId, audioId, subId, title }) {
   if (!s || s.probe?.status !== 'ok') throw new Error(tx('errNotAnalysed'));
   const d = s.probe.data;
   const { castPrefs } = await chrome.storage.local.get('castPrefs');
-  const devices = (await chrome.storage.session.get('castDevices')).castDevices?.devices || [];
+  const devices = (await chrome.storage.session.get('castDevices')).castDevices?.devices
+    || (await chrome.storage.local.get('castKnown')).castKnown || [];
   const device = devices.find((x) => x.id === castPrefs?.deviceId);
   if (!device) throw new Error(tx('castPickDevice'));
   const route = castPrefs?.route || 'relay';
@@ -510,8 +516,8 @@ async function castStart({ tabId, streamId, videoId, audioId, subId, title }) {
   };
   const old = await getCast();
   if (castLive(old)) { try { hostSend({ type: 'castControl', sessionId: old.id, action: 'stop' }); } catch {} }
-  await chrome.storage.session.set({ cast, lastCastSpec: { spec, deviceId: device.id, route } });
-  hostSend({ type: 'castStart', sessionId: cast.id, deviceId: device.id, route, spec });
+  await chrome.storage.session.set({ cast, lastCastSpec: { spec, deviceId: device.id, device, route } });
+  hostSend({ type: 'castStart', sessionId: cast.id, deviceId: device.id, device, route, spec });
   keepAlive();
   return cast.id;
 }
@@ -523,7 +529,7 @@ async function castRetry() {
   if (!c || !lastCastSpec) return;
   const id = crypto.randomUUID().slice(0, 12);
   await chrome.storage.session.set({ cast: { ...c, id, state: 'connecting', error: null } });
-  hostSend({ type: 'castStart', sessionId: id, deviceId: lastCastSpec.deviceId, route: lastCastSpec.route,
+  hostSend({ type: 'castStart', sessionId: id, deviceId: lastCastSpec.deviceId, device: lastCastSpec.device, route: lastCastSpec.route,
     spec: { ...lastCastSpec.spec, sel: c.sel } });
   keepAlive();
 }
@@ -531,7 +537,7 @@ async function castRetry() {
 function onCastEvent(msg) {
   return mutateCast((c) => {
     if (c.id !== msg.sessionId) return;
-    for (const k of ['state', 'error', 'position', 'duration', 'volume', 'muted', 'sel', 'caps']) {
+    for (const k of ['state', 'error', 'position', 'duration', 'volume', 'muted', 'sel', 'caps', 'route', 'note']) {
       if (msg[k] !== undefined) c[k] = msg[k];
     }
     c.at = Date.now();

@@ -559,8 +559,11 @@
   "castAddHelp": {
     "message": "Aggiungi una TV per indirizzo quando la ricerca non la vede: l'IP di un Chromecast o l'URL di descrizione di una TV DLNA."
   },
+  "castStale": {
+    "message": "non vista nell'ultima ricerca"
+  },
   "castFirewall": {
-    "message": "L'app locale cerca le TV sulle porte UDP 5353 (Chromecast) e 1900 (DLNA) e, con \"tramite app locale\", la TV prende il video da questo PC sulla porta TCP 8790: se il PC ha un firewall, consentile nella rete di casa."
+    "message": "L'app locale cerca le TV sulle porte UDP 5353 (Chromecast) e 1900 (DLNA) e, con \"tramite app locale\", la TV prende il video da questo PC sulla porta TCP 8790: se il PC ha un firewall, consentile dalla rete di casa (con ufw: sudo ufw allow from 192.168.1.0/24 to any port 8790 proto tcp, e lo stesso con port 1900 proto udp per le TV DLNA)."
   },
   "castRouteLabel": {
     "message": "Percorso"

@@ -24,7 +24,7 @@ export function trackLabel(kind, x) {
   return `${langLabel(x.lang)}${name}${x.forced ? ` (${t('forced')})` : ''}`;
 }
 
-export const deviceLabel = (d) => `${d.name}${d.audioOnly ? ` (${t('castAudioOnly')})` : ''} · ${d.kind === 'chromecast' ? 'Chromecast' : 'DLNA'}`;
+export const deviceLabel = (d) => `${d.name}${d.audioOnly ? ` (${t('castAudioOnly')})` : ''} · ${d.kind === 'chromecast' ? 'Chromecast' : 'DLNA'}${d.stale ? ` (${t('castStale')})` : ''}`;
 
 const ctl = (c, action, value) => send({ type: 'castControl', sessionId: c.id, action, value });
 const pick = (c, kind, trackId) => send({ type: 'castSelect', sessionId: c.id, kind, trackId });
@@ -76,6 +76,7 @@ export function renderCastManager(c, { full = false } = {}) {
         el('div', { class: 'cast-title', title: c.title || '' }, c.title || '—'),
         el('div', { class: 'cast-dev muted' }, [c.device?.name, c.route === 'direct' ? t('castRouteDirect') : t('castRouteRelay')].filter(Boolean).join(' · '))),
       el('span', { class: `cast-state ${c.state}` }, busy ? el('span', { class: 'spinner' }) : null, t(`castState_${c.state}`) || c.state)),
+    c.note && !c.error ? el('div', { class: 'muted cast-note' }, c.note) : null,
     c.error ? el('div', { class: 'err' }, c.error, c.route === 'direct' ? el('span', { class: 'hint' }, ` ${t('castDirectHint')}`) : null) : null,
     el('div', { class: 'cast-time' }, el('span', { class: 'cast-pos' }, fmtTime(c.position)), seek, el('span', { class: 'muted' }, dur ? fmtTime(dur) : '–:––')),
     el('div', { class: 'cast-controls' },
