@@ -29,7 +29,7 @@ import traceback
 import urllib.parse
 import urllib.request
 
-VERSION = "0.11.1"
+VERSION = "0.12.0"
 CACHE_DIR = os.path.join(os.path.expanduser("~/.cache"), "fluxy")
 LOG_FILE = os.path.join(CACHE_DIR, "host.log")
 UA_FALLBACK = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -886,6 +886,7 @@ class Job:
             cmd = ["yt-dlp", "--newline", "--no-warnings", "--no-playlist", "--no-mtime",
                    "--no-part", "--fixup", "never", "-N", str(share[i]),
                    "--retries", "10", "--fragment-retries", "20",
+                   "--retry-sleep", "http:exp=1:60", "--retry-sleep", "fragment:exp=1:60",
                    "--progress-template", "download:FCPROG %(progress)j",
                    *ytdlp_header_args(headers), "-o", prefix + ".%(ext)s"]
             if rate_each:

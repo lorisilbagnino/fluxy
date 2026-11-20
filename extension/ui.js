@@ -166,6 +166,7 @@ export function jobSummary(j) {
 }
 
 const expiredHint = (j) => j.state === 'error' && /\b40[13]\b|forbidden|unauthori[sz]ed|access denied/i.test(j.error || '');
+const tooManyHint = (j) => j.state === 'error' && /\b429\b|too many requests/i.test(j.error || '');
 
 function jobButtons(j, full) {
   const b = (label, msg, cls = '') => el('button', { class: full ? `ghost ${cls}` : `link ${cls}`, onclick: () => send({ ...msg, jobId: j.id }) }, label);
@@ -208,7 +209,7 @@ export function renderJob(j, { full = false } = {}) {
     : '';
   const summary = jobSummary(j);
   const info = j.state === 'error'
-    ? el('span', { class: 'err', title: j.error || '' }, j.error || t('error'), expiredHint(j) ? el('span', { class: 'hint' }, ` ${t('hint403')}`) : null)
+    ? el('span', { class: 'err', title: j.error || '' }, j.error || t('error'), expiredHint(j) ? el('span', { class: 'hint' }, ` ${t('hint403')}`) : tooManyHint(j) ? el('span', { class: 'hint' }, ` ${t('hint429')}`) : null)
     : `${j.stage || ''}${summary && !full ? ` — ${summary}` : ''}`;
   return el('div', { class: `job ${j.state}${recording ? ' recording' : ''}${full ? ' full' : ''}` },
     edits.has(j.id) && RENAMABLE.includes(j.state)
@@ -261,7 +262,12 @@ export function renderOverall(jobs) {
   const known = list.every((j) => j.total);
   const total = list.reduce((a, j) => a + (j.total || 0), 0);
   const size = bytes || total ? `${fmtSize(bytes)}${known ? ` / ${list.some((j) => j.approx) ? '≈' : ''}${fmtSize(total)}` : ''}` : null;
+  // several downloads from the same site at the same time: some providers ban the IP for it
+  const byHost = {};
+  for (const j of list) if (['running', 'saving'].includes(j.state) && j.detail?.host) byHost[j.detail.host] = (byHost[j.detail.host] || 0) + 1;
+  const busy = Object.entries(byHost).find(([, k]) => k > 1);
   return el('div', { class: 'overall', title: t('overallTitle') },
+    busy ? el('div', { class: 'site-warn' }, t('sameSiteWarn', String(busy[1]), busy[0])) : null,
     el('div', { class: 'overall-top' },
       el('span', {}, t('overall', n(['running', 'saving']), n(['queued']), n(['paused']))),
       el('span', {}, [size, fmtSpeed(speed), `${pct}%`].filter(Boolean).join(' · '))),

@@ -491,6 +491,34 @@
       }
     }
   },
+  "aboutCws": {
+    "message": "Fluxy on the Chrome Web Store (Chrome, Edge, Brave…)"
+  },
+  "aboutAmo": {
+    "message": "Fluxy on Firefox Add-ons"
+  },
+  "hint429": {
+    "message": "The site is limiting requests (too many at once). Wait a few minutes, lower concurrent downloads and connections in the settings, then retry."
+  },
+  "loadWarn": {
+    "message": "Up to $p1$ connections at once. Some sites block your IP, even for days, when they get too many requests together: if a site starts refusing downloads, go back to 2 downloads and 8 connections.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sameSiteWarn": {
+    "message": "$p1$ downloads from $p2$ at the same time: some sites block the IP if they get too many requests. If errors start, pause one.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
   "hint403": {
     "message": "The server refused the request: the link may have expired. Retry renews it; if that's not enough, reopen the page, press Detect and retry."
   },

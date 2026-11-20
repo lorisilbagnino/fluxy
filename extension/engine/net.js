@@ -18,13 +18,28 @@ const globalPool = createPool(GLOBAL_MAX);
 const sharedPool = createPool(8);   // requests without a job pool (stream analysis in the background)
 
 async function acquire(pool) {
-  if (pool.active >= pool.max) await new Promise((r) => pool.queue.push(r));
+  while (pool.active >= pool.max) await new Promise((r) => pool.queue.push(r));
   pool.active++;
 }
 
 function release(pool) {
   pool.active--;
-  pool.queue.shift()?.();
+  if (pool.active < pool.max) pool.queue.shift()?.();
+}
+
+/**
+ * The server says "too many requests" (429) or is overloaded (503): halve the job's connections and wait
+ * longer (Retry-After if given). Some sites ban the IP if a client keeps hammering them.
+ */
+function slowDown(pool, e, i) {
+  // a burst of 429s arrives together: halve once per burst, not once per refused request
+  if (pool !== sharedPool && pool.max > 1 && Date.now() - (pool.slowedAt || 0) > 5000) {
+    pool.slowedAt = Date.now();
+    pool.max = Math.max(1, Math.ceil(pool.max / 2));
+    console.warn('[flux] server asks to slow down: connections ->', pool.max);
+  }
+  const after = Number(e.retryAfter);
+  return Math.min(120000, after > 0 ? after * 1000 : 3000 * 2 ** i);
 }
 
 async function withSlot(pool, fn) {
@@ -98,7 +113,7 @@ export async function fetchBytes(url, opts = {}, tries = 6) {
       return await withSlot(pool, async () => {
         if (init.signal?.aborted) throw new CancelledError();
         const r = await fetch(url, { credentials: 'include', ...init });
-        if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status}`), { status: r.status });
+        if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status}`), { status: r.status, retryAfter: r.headers.get('retry-after') });
         return readBody(r, init.signal, pool);
       });
     } catch (e) {
@@ -110,7 +125,7 @@ export async function fetchBytes(url, opts = {}, tries = 6) {
         throw new Error(m('eng_http', e.message, host) + hint);
       }
       console.warn('[flux] retry', i + 1, url, e.message);
-      await sleep(400 * 2 ** i, init.signal);
+      await sleep(e.status === 429 || e.status === 503 ? slowDown(pool, e, i) : 400 * 2 ** i, init.signal);
     }
   }
 }

@@ -491,6 +491,34 @@
       }
     }
   },
+  "aboutCws": {
+    "message": "Fluxy sul Chrome Web Store (Chrome, Edge, Brave…)"
+  },
+  "aboutAmo": {
+    "message": "Fluxy su Firefox Add-ons"
+  },
+  "hint429": {
+    "message": "Il sito sta limitando le richieste (troppe insieme). Aspetta qualche minuto, riduci download contemporanei e connessioni nelle impostazioni, poi riprova."
+  },
+  "loadWarn": {
+    "message": "Fino a $p1$ connessioni insieme. Alcuni siti bloccano l'IP, anche per giorni, se ricevono troppe richieste contemporanee: se un sito inizia a rifiutare i download, torna a 2 download e 8 connessioni.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sameSiteWarn": {
+    "message": "$p1$ download da $p2$ in contemporanea: alcuni siti bloccano l'IP se ricevono troppe richieste. Se compaiono errori, mettine in pausa uno.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
   "hint403": {
     "message": "Il server ha rifiutato la richiesta: il link potrebbe essere scaduto. Riprova lo rinnova; se non basta, riapri la pagina, premi Rileva e riprova."
   },

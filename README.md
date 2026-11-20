@@ -10,6 +10,9 @@ as **one MKV or MP4 without re-encoding**. Interface in English and Italian (it 
 
 <p align="center"><img src="docs/store/images/en/promo-marquee-1400x560.png" alt="Fluxy" width="100%"></p>
 
+**Install**: [Chrome Web Store](https://chromewebstore.google.com/detail/ochkddgofckdojefpjcflkmignbmimjn) (Chrome, Edge, Brave…) · [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/fluxy-stream-downloader/) ·
+[GitHub releases](https://github.com/lorisilbagnino/fluxy/releases) (with YouTube support via the local app).
+
 <table>
 <tr>
 <td width="50%"><img src="docs/store/images/en/screenshot-1-popup.png" alt="Pick video quality, audio languages and subtitles"><br><sub>Pick video quality, audio languages and subtitles</sub></td>
@@ -111,6 +114,8 @@ Privacy policy: `docs/PRIVACY.md`. Images (1280×800 screenshots and promo tiles
 
 ## Installation
 
+From the stores: [Chrome Web Store](https://chromewebstore.google.com/detail/ochkddgofckdojefpjcflkmignbmimjn) or [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/fluxy-stream-downloader/). To build and load it yourself:
+
 1. Load the extension:
    - **Chromium/Brave**: `brave://extensions` → *Developer mode* → *Load unpacked* → `dist/chromium/`. The ID is fixed
      (`kipokjinmlcebonicoplnakgedbnlgjo`) by the manifest `key`.
@@ -208,6 +213,13 @@ If you register the app from the repository with `./host/install.sh` and then mo
 - **Rename while downloading** (✎): the name is used only when the file is saved, so it can change until then
   (local app: until the merge finishes).
 - Removing a paused or failed download deletes its staged data.
+
+### Don't overload the sites
+
+Some providers block the IP address, sometimes for days, when they receive too many requests at once. The settings
+warn when concurrent downloads × connections go above 16, and the download list warns when two downloads from the same
+site run together. When a server answers *429 Too Many Requests* or *503*, the in-browser engine halves that download's
+connections and waits longer before retrying (honouring `Retry-After`); the local app makes yt-dlp wait between retries.
 
 ## Debug
 

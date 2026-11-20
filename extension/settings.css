@@ -29,3 +29,6 @@ input[type=text], input[type=number], select {
 .row.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .row.three label > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .panel label small.help { color: var(--muted); font-size: 11.5px; }
+.load-warn { margin: 0; padding: 8px 10px; border-radius: 8px; font-size: 12px; line-height: 1.45;
+  color: var(--text); background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border)); }
