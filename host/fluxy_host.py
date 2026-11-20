@@ -127,6 +127,8 @@ TEXT = {
         "No TV answers at {address}": "Nessuna TV risponde all'indirizzo {address}",
         "The TV can't reach this PC on port {port}: a firewall is probably blocking it.": "La TV non riesce a collegarsi a questo PC sulla porta {port}: probabilmente la blocca un firewall.",
         "With ufw: {cmd}": "Con ufw: {cmd}",
+        "This system can't ask for the password here: {cmd}": "Questo sistema non può chiedere la password da qui: {cmd}",
+        "The TV can't reach this PC: it now plays the stream by itself (tracks chosen by the TV).": "La TV non riesce a raggiungere questo PC: ora riproduce lo stream da sola (tracce scelte dalla TV).",
         "{tv} couldn't play the stream: switched to {other}.": "{tv} non è riuscita a riprodurre lo stream: passata a {other}.",
         "The TV couldn't play the original address: switched to the local app route.": "La TV non è riuscita a riprodurre l'indirizzo originale: passata al percorso tramite app locale.",
         "With firewalld: {cmd}": "Con firewalld: {cmd}",
@@ -1980,8 +1982,14 @@ class CastSession:
         self.id = sid
         self.device = device
         self.mode = route                     # what the user chose: 'auto' | 'direct' | 'relay'
-        self.route = "relay" if route == "relay" else "direct"     # what is in use now
         self.twins = twins or []              # the same TV under another protocol (e.g. AirScreen: Cast + DLNA)
+        # automatic route: DLNA TVs can't switch tracks when they read the original stream, so if this PC is
+        # reachable they start through the local app; otherwise the TV goes on its own first (no ports needed)
+        relay_first = route == "auto" and device["kind"] == "dlna" and firewall_status()["open"]
+        self.route = "relay" if route == "relay" or relay_first else "direct"     # what is in use now
+        self.plan = ([(device, "relay")] if relay_first else []) + [(device, "direct")] \
+            + [(t, "direct") for t in self.twins] + ([] if relay_first else [(device, "relay")])
+        self.error_code = None                # 'firewall': the TV can't reach this PC
         self.start_at = float(start_at or 0)
         self.tried: set = set()
         self.spec = spec
@@ -2022,6 +2030,7 @@ class CastSession:
             return
         self.last_emit = now
         send({"type": "cast", "sessionId": self.id, "state": self.state, "error": self.error, "route": self.route, "note": self.note,
+              "errorCode": self.error_code if self.error else None, "mode": self.mode,
               "device": {k: self.device.get(k) for k in ("id", "kind", "name", "model", "host")},
               "position": round(self.pos(), 1), "duration": self.duration, "volume": self.volume, "muted": self.muted,
               "sel": self.sel, "caps": self.caps()})
@@ -2040,22 +2049,22 @@ class CastSession:
         if self.mode != "auto" or self.played or self.stopped:
             return False
         self.tried.add((self.device["id"], self.route))
-        twin = next((t for t in self.twins if (t["id"], "direct") not in self.tried), None) if self.route == "direct" else None
-        if twin:
-            nxt, route = twin, "direct"
-            self.note = T("{tv} couldn't play the stream: switched to {other}.", tv=self.device["name"], other=twin["name"])
-        elif (self.device["id"], "relay") not in self.tried:
-            nxt, route = self.device, "relay"
+        nxt, route = next(((d, r) for d, r in self.plan if (d["id"], r) not in self.tried), (None, None))
+        if not nxt:
+            return False
+        if nxt["id"] != self.device["id"]:
+            self.note = T("{tv} couldn't play the stream: switched to {other}.", tv=self.device["name"], other=nxt["name"])
+        elif route == "relay":
             self.note = T("The TV couldn't play the original address: switched to the local app route.")
         else:
-            return False
+            self.note = T("The TV can't reach this PC: it now plays the stream by itself (tracks chosen by the TV).")
         self.fell_back = True
         at = self.pos() if self.offset or self.position else self.start_at
         log("cast: fallback to", nxt["name"], route)
 
         def go():
             try:
-                if nxt is not self.device:
+                if nxt["id"] != self.device["id"]:
                     old = self.ctl
                     old.on_event = lambda ev: None     # its "connection closed" is not news
                     self.device, self.route = nxt, route
@@ -2406,7 +2415,9 @@ class CastSession:
             time.sleep(15)
             if self.stopped or self.relay_route is not route or getattr(route, "hits", 0) or self.state == "playing":
                 return
-            self.state, self.error = "error", firewall_hint(self.device["host"])
+            if self.fallback():               # automatic route: let the TV play on its own
+                return
+            self.state, self.error, self.error_code = "error", firewall_hint(self.device["host"]), "firewall"
             log("cast: the TV never fetched the relay", self.device["host"])
             self.emit(force=True)
         threading.Thread(target=check, daemon=True).start()
@@ -2503,6 +2514,60 @@ class CastSession:
         return not self.stopped and self.state not in ("idle", "ended", "error", "stopped")
 
 
+def _lan_net() -> str:
+    ip = lan_ip_for("192.168.0.1")      # the interface towards the home network
+    return ".".join(ip.split(".")[:3]) + ".0/24"
+
+
+def firewall_status() -> dict:
+    """Which firewall guards this PC and whether the relay port is already allowed (best effort, no root)."""
+    port = str(RELAY_PORT)
+    try:
+        with open("/etc/ufw/ufw.conf", encoding="utf-8") as fh:
+            ufw_on = re.search(r"^ENABLED=yes", fh.read(), re.M) is not None
+    except OSError:
+        ufw_on = False
+    if ufw_on:
+        try:
+            with open("/etc/ufw/user.rules", encoding="utf-8") as fh:
+                rules = fh.read()
+            allowed = re.search(rf"--dports? (?:\S*,)?{port}\b", rules) is not None
+        except OSError:
+            allowed = False
+        return {"firewall": "ufw", "open": allowed}
+    if shutil.which("firewall-cmd"):
+        try:
+            st = subprocess.run(["firewall-cmd", "--state"], capture_output=True, text=True, timeout=5)
+            if st.stdout.strip() == "running":
+                ls = subprocess.run(["firewall-cmd", "--list-all"], capture_output=True, text=True, timeout=5).stdout
+                return {"firewall": "firewalld", "open": f"{port}/tcp" in ls or f'port="{port}"' in ls}
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return {"firewall": None, "open": True}
+
+
+def allow_relay_port() -> dict:
+    """Opens the relay port to the home network, asking the system password in its own window (pkexec)."""
+    fw = firewall_status()
+    if fw["open"]:
+        return {"ok": True, **fw}
+    if not shutil.which("pkexec"):
+        return {"ok": False, "error": T("This system can't ask for the password here: {cmd}", cmd=firewall_hint("192.168.1.1")), **fw}
+    port, net = RELAY_PORT, _lan_net()
+    if fw["firewall"] == "ufw":
+        cmd = ["pkexec", "ufw", "allow", "from", net, "to", "any", "port", str(port), "proto", "tcp", "comment", "Fluxy cast"]
+    else:
+        rule = f"rule family=ipv4 source address={net} port port={port} protocol=tcp accept"
+        cmd = ["pkexec", "sh", "-c", f"firewall-cmd --permanent --add-rich-rule='{rule}' && firewall-cmd --reload"]
+    log("firewall: asking", " ".join(cmd))
+    p = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    if p.returncode in (126, 127) and "dismissed" in (p.stderr + p.stdout).lower() or p.returncode == 126:
+        return {"ok": False, "cancelled": True, **fw}
+    if p.returncode != 0:
+        return {"ok": False, "error": (p.stderr or p.stdout).strip()[-300:] or f"exit {p.returncode}", **fw}
+    return {"ok": True, **firewall_status()}
+
+
 def firewall_hint(device_host: str) -> str:
     port = RELAY.port or RELAY_PORT
     net = ".".join(lan_ip_for(device_host).split(".")[:3]) + ".0/24"
@@ -2533,6 +2598,14 @@ def cast_handle(msg: dict):
                 send({"type": "castDevices", "id": rid, "ok": True, "devices": [public_device(d) for d in devs]})
             except Exception as e:  # noqa: BLE001
                 send({"type": "castDevices", "id": rid, "ok": False, "error": str(e)})
+        threading.Thread(target=work, daemon=True).start()
+    elif t == "castFirewall":
+        def work():
+            try:
+                r = allow_relay_port() if msg.get("allow") else {"ok": True, **firewall_status()}
+            except Exception as e:  # noqa: BLE001
+                r = {"ok": False, "error": str(e)}
+            send({"type": "castFirewall", "id": rid, **r})
         threading.Thread(target=work, daemon=True).start()
     elif t == "castAddDevice":
         def work():
