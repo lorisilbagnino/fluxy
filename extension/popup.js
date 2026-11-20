@@ -7,7 +7,7 @@ import {
   t, UI_LANG, translate, $, send, el, langLabel, nameIsJustLang, prettyCodec, listFmt, channelsLabel,
   fmtBitrate, fmtDuration, fmtSize, renderJob, sortJobs, setRerender, restoreEditFocus, renderOverall, speedLimitControl,
 } from './ui.js';
-import { castShown, castDragging, renderCastManager, devicePicker, routePicker } from './cast-ui.js';
+import { castShown, mountCastManager, devicePicker, routePicker } from './cast-ui.js';
 
 let tabId = null;
 let tabTitle = '';
@@ -279,7 +279,7 @@ function renderCast(c = castState) {
   const shown = castShown(c);
   $('#cast-head').hidden = !shown;
   if (!shown) $('#cast').replaceChildren();
-  else if (!castDragging()) $('#cast').replaceChildren(renderCastManager(c));
+  else mountCastManager($('#cast'), c);
   renderJobs(lastJobs);     // the stream manager takes the place of the downloads
 }
 

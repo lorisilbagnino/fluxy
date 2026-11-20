@@ -103,6 +103,28 @@ export function renderCastManager(c, { full = false } = {}) {
 /** Keeps the slider still while it is being dragged (the manager re-renders every second). */
 export const castDragging = () => dragging;
 
+/** Everything shown by the manager except the position, which changes every second. */
+const castKey = (c) => { const { position, at, ...rest } = c; return JSON.stringify(rest); };
+
+/**
+ * Shows the manager in `box`. While playing only the time and the slider move: the rest is rebuilt when
+ * something else changes, and never while a menu or slider in it is in use (it would close under the user).
+ */
+export function mountCastManager(box, c, opts) {
+  const prev = box.querySelector(':scope > .cast');
+  const focus = document.activeElement;
+  const inUse = dragging || (prev && prev.contains(focus) && ['SELECT', 'INPUT'].includes(focus.tagName));
+  if (prev && (inUse || prev.dataset.key === castKey(c))) {
+    prev.querySelector('.cast-pos').textContent = fmtTime(c.position);
+    const seek = prev.querySelector('.cast-seek');
+    if (!dragging && seek) seek.value = Math.floor(c.position || 0);
+    return;
+  }
+  const node = renderCastManager(c, opts);
+  node.dataset.key = castKey(c);
+  box.replaceChildren(node);
+}
+
 /**
  * TV picker: discovered devices + "search again". `state` = {devices, at, searching, error} from
  * storage.session "castDevices"; `prefs` = {deviceId, route} from storage.local "castPrefs".

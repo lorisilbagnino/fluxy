@@ -5,7 +5,7 @@
 import { t, UI_LANG, translate, $, send, el, renderJob, sortJobs, setRerender, restoreEditFocus, renderOverall, speedLimitControl } from './ui.js';
 import { mountSettings } from './settings.js';
 import { DONATE_URL } from './build-flags.js';
-import { castShown, castDragging, renderCastManager, deviceLabel, routePicker } from './cast-ui.js';
+import { castShown, mountCastManager, deviceLabel, routePicker } from './cast-ui.js';
 
 // ---- tabs (URL hash) ----------------------------------------------------------------
 const TABS = ['downloads', 'cast', 'settings', 'about'];
@@ -63,7 +63,7 @@ function renderCastTab() {
   const shown = castShown(castState);
   $('#cast-empty').hidden = shown;
   if (!shown) $('#cast-now').replaceChildren();
-  else if (!castDragging()) $('#cast-now').replaceChildren(renderCastManager(castState, { full: true }));
+  else mountCastManager($('#cast-now'), castState, { full: true });
   const noApp = hostState?.status && hostState.status !== 'ok';
   $('#cast-noapp').hidden = !noApp;
   $('#cast-noapp').textContent = noApp ? t('castNeedsApp') : '';
