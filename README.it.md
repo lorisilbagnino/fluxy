@@ -124,9 +124,13 @@ scheda **Trasmissione**, con l'elenco delle TV, "cerca di nuovo" e "aggiungi per
 
 - Tutto passa dall'app locale (`fluxy_host.py`, solo libreria standard): le estensioni Chrome non possono caricare
   l'SDK Cast di Google (il codice remoto è vietato in MV3, anche fuori dallo store) e Firefox non supporta Cast.
-- Il percorso *diretto* è più leggero ma molti siti rifiutano le richieste della TV (niente cookie/Referer, niente
-  CORS): quello predefinito è *tramite app locale*. Con gli stream rimuxati la ricerca riavvia ffmpeg dalla nuova
-  posizione.
+- Percorsi: **automatico** (predefinito) prova prima la TV da sola, così sul PC non c'è niente da aprire; poi la
+  stessa TV con l'altro protocollo (AirScreen e app simili sono sia Chromecast sia ricevitore DLNA, con player
+  diversi); solo per ultimo l'inoltro. Il dispositivo che funziona diventa la scelta successiva. Il *diretto* da solo è
+  più leggero ma alcuni siti o player lo rifiutano; *tramite app locale* passa gli header della pagina, sistema CORS e
+  segmenti con nomi travestiti (es. MPEG-TS serviti come `.html`/`.m4s`) e permette di scegliere le tracce su ogni TV.
+  Con gli stream rimuxati la ricerca riavvia ffmpeg dalla nuova posizione. **↻** ritrasmette subito dalla posizione
+  attuale.
 - **Firewall**: la ricerca usa UDP 5353 e 1900; con l'inoltro la TV si collega a questo PC sulla **porta TCP 8790**
   (si cambia con `FLUXY_RELAY_PORT`). Se una TV non compare, aggiungila per indirizzo (IP del Chromecast o URL di
   descrizione DLNA).

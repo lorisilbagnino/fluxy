@@ -232,8 +232,12 @@ again" and "add by address".
 
 - Everything goes through the local app (`fluxy_host.py`, standard library only): Chrome extensions can't load Google's
   Cast SDK (remote code is not allowed in MV3, not even outside the store), and Firefox has no Cast support at all.
-- *Direct* is lighter but many sites refuse the TV's requests (no cookies/Referer, no CORS): the default is *through the
-  local app*. With remuxed streams a seek restarts ffmpeg from the new position.
+- Routes: **automatic** (default) tries the TV on its own first, so nothing has to be opened on this PC; then the same
+  TV under its other protocol (AirScreen and similar apps are both a Chromecast and a DLNA renderer: their players
+  differ); only as a last resort the relay. The device that worked becomes the next choice. *Direct* alone is lighter
+  but some sites or players refuse it; *through the local app* passes the page's headers, fixes CORS and disguised
+  segment names (e.g. MPEG-TS served as `.html`/`.m4s`), and lets you choose the tracks on every TV. With remuxed
+  streams a seek restarts ffmpeg from the new position. **↻** casts again at once from the current position.
 - **Firewall**: discovery uses UDP 5353 and 1900; with the relay the TV connects to this PC on **TCP 8790**
   (`FLUXY_RELAY_PORT` to change it). If no TV shows up, add it by address (Chromecast IP, or the DLNA description URL).
 - Store builds cast everything except YouTube; the GitHub builds also cast YouTube and the other yt-dlp sites.
