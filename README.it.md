@@ -10,6 +10,9 @@ Estensione per browser Chromium e Firefox (testata su **Brave Origin 157** e **F
 
 <p align="center"><img src="docs/store/images/it/promo-marquee-1400x560.png" alt="Fluxy" width="100%"></p>
 
+**Installa**: [Chrome Web Store](https://chromewebstore.google.com/detail/ochkddgofckdojefpjcflkmignbmimjn) (Chrome, Edge, Brave…) · [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/fluxy-stream-downloader/) ·
+[release su GitHub](https://github.com/lorisilbagnino/fluxy/releases) (con il supporto YouTube tramite l'app locale).
+
 <table>
 <tr>
 <td width="50%"><img src="docs/store/images/it/screenshot-1-popup.png" alt="Scegli qualità video, lingue audio e sottotitoli"><br><sub>Scegli qualità video, lingue audio e sottotitoli</sub></td>
@@ -61,6 +64,8 @@ A ogni push su `main` il workflow pubblica la release `vX.Y.Z` se la versione de
 
 ## Installazione
 
+Dagli store: [Chrome Web Store](https://chromewebstore.google.com/detail/ochkddgofckdojefpjcflkmignbmimjn) o [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/fluxy-stream-downloader/). Per compilarla e caricarla da te:
+
 1. Carica l'estensione:
    - **Chromium/Brave**: `brave://extensions` → *Modalità sviluppatore* → *Carica estensione non pacchettizzata* →
      `dist/chromium/` (ID fisso `kipokjinmlcebonicoplnakgedbnlgjo`).
@@ -100,6 +105,14 @@ con *Rileva*.
 - **MKV** consigliato. **MP4**: sottotitoli `.srt` accanto al video (motore nel browser) o `mov_text` (app locale).
 - Motore nel browser: durante il lavoro serve circa **2× la dimensione del film** su disco (controllato prima di
   iniziare).
+
+### Non sovraccaricare i siti
+
+Alcuni provider bloccano l'indirizzo IP, a volte per giorni, se ricevono troppe richieste insieme. Le impostazioni
+avvisano quando download contemporanei × connessioni superano 16 e l'elenco dei download avvisa quando due download
+dello stesso sito procedono insieme. Se un server risponde *429 Too Many Requests* o *503*, il motore nel browser
+dimezza le connessioni di quel download e aspetta di più prima di riprovare (rispettando `Retry-After`); l'app locale
+fa attendere yt-dlp tra un tentativo e l'altro.
 
 ## Debug, sistemi, limiti
 

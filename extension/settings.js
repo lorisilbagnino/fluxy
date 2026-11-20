@@ -41,6 +41,7 @@ const HTML = `
       <input data-s="fragments" type="number" min="1" max="32">
     </label>
   </div>
+  <p data-s="load-warn" class="load-warn" hidden></p>
   <label><span data-i18n="speedLimit"></span>
     <input data-s="speedLimit" type="number" min="0" step="0.5">
     <small class="help" data-i18n="speedLimitHelp"></small>
@@ -78,7 +79,19 @@ export async function mountSettings(root, { onChange } = {}) {
     set('langs', 'value', settings.langs);
     set('auto', 'checked', !!settings.autoDetect);
     q('dir-field').hidden = settings.engine !== 'native';
+    loadWarn();
   };
+
+  // Many downloads × many connections hit the same site at once: some providers ban the IP for it.
+  const loadWarn = () => {
+    const jobs = Math.max(1, parseInt(q('maxJobs').value, 10) || 1);
+    const conns = Math.max(1, parseInt(q('fragments').value, 10) || 1);
+    const total = jobs * conns;
+    const box = q('load-warn');
+    box.hidden = !(total > 16 || jobs > 3 || conns > 12);
+    if (!box.hidden) box.textContent = t('loadWarn', String(total));
+  };
+  for (const k of ['maxJobs', 'fragments']) q(k).addEventListener('input', loadWarn);
 
   const save = (partial) => {
     settings = {
