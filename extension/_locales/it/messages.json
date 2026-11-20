@@ -497,6 +497,170 @@
   "aboutAmo": {
     "message": "Fluxy su Firefox Add-ons"
   },
+  "tabCast": {
+    "message": "Trasmissione"
+  },
+  "castTo": {
+    "message": "Trasmetti"
+  },
+  "castStartBtn": {
+    "message": "Trasmetti alla TV"
+  },
+  "castNow": {
+    "message": "Sulla TV"
+  },
+  "castOpenPage": {
+    "message": "apri ↗"
+  },
+  "castDownloadsLink": {
+    "message": "download ($p1$) ↗",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "castEmpty": {
+    "message": "Nessuna trasmissione in corso. Nel popup scegli \"Trasmetti\" su uno stream, poi video, audio, sottotitoli e la TV."
+  },
+  "castDevicesTitle": {
+    "message": "TV in rete"
+  },
+  "castSearch": {
+    "message": "Cerca di nuovo"
+  },
+  "castSearchTitle": {
+    "message": "Cerca Chromecast e TV DLNA nella rete"
+  },
+  "castSearching": {
+    "message": "Ricerca…"
+  },
+  "castNoDevices": {
+    "message": "Nessuna TV: cerca nella rete"
+  },
+  "castNoneFound": {
+    "message": "Nessuna TV trovata. Controlla che sia accesa e nella stessa rete; se il PC ha un firewall, leggi sotto o aggiungi la TV per indirizzo."
+  },
+  "castDevice": {
+    "message": "TV"
+  },
+  "castAudioOnly": {
+    "message": "solo audio"
+  },
+  "castManual": {
+    "message": "aggiunta per indirizzo"
+  },
+  "castAdd": {
+    "message": "Aggiungi"
+  },
+  "castAddPlaceholder": {
+    "message": "192.168.1.20 (Chromecast) o http://…/description.xml (DLNA)"
+  },
+  "castAddHelp": {
+    "message": "Aggiungi una TV per indirizzo quando la ricerca non la vede: l'IP di un Chromecast o l'URL di descrizione di una TV DLNA."
+  },
+  "castFirewall": {
+    "message": "L'app locale cerca le TV sulle porte UDP 5353 (Chromecast) e 1900 (DLNA) e, con \"tramite app locale\", la TV prende il video da questo PC sulla porta TCP 8790: se il PC ha un firewall, consentile nella rete di casa."
+  },
+  "castRouteLabel": {
+    "message": "Percorso"
+  },
+  "castRouteRelay": {
+    "message": "tramite app locale"
+  },
+  "castRouteDirect": {
+    "message": "diretto"
+  },
+  "castRouteHelp": {
+    "message": "Come la TV riceve il video"
+  },
+  "castRouteRelayHelp": {
+    "message": "L'app locale scarica lo stream con gli header della pagina e lo passa alla TV: funziona anche con gli stream protetti."
+  },
+  "castRouteDirectHelp": {
+    "message": "La TV prende da sola l'indirizzo originale: più leggero per il PC, ma molti siti lo rifiutano (niente cookie, niente CORS)."
+  },
+  "castNeedsApp": {
+    "message": "La trasmissione passa dall'app locale: installala per trasmettere a Chromecast e TV DLNA."
+  },
+  "castCheckingApp": {
+    "message": "Verifica dell'app locale…"
+  },
+  "castPickDevice": {
+    "message": "Scegli prima una TV (cerca nella rete)"
+  },
+  "castDirectHint": {
+    "message": "Prova il percorso \"tramite app locale\": il sito potrebbe rifiutare le richieste che non arrivano dalla sua pagina."
+  },
+  "castState_connecting": {
+    "message": "connessione…"
+  },
+  "castState_loading": {
+    "message": "caricamento…"
+  },
+  "castState_buffering": {
+    "message": "buffering…"
+  },
+  "castState_playing": {
+    "message": "in riproduzione"
+  },
+  "castState_paused": {
+    "message": "in pausa"
+  },
+  "castState_idle": {
+    "message": "fermata sulla TV"
+  },
+  "castState_ended": {
+    "message": "finita"
+  },
+  "castState_error": {
+    "message": "errore"
+  },
+  "castState_stopped": {
+    "message": "interrotta"
+  },
+  "castSeek": {
+    "message": "Posizione"
+  },
+  "castBack": {
+    "message": "Indietro di 10 secondi"
+  },
+  "castForward": {
+    "message": "Avanti di 30 secondi"
+  },
+  "castPlay": {
+    "message": "Riproduci"
+  },
+  "castPause": {
+    "message": "Pausa"
+  },
+  "castStop": {
+    "message": "Interrompi la trasmissione"
+  },
+  "castMute": {
+    "message": "Silenzia"
+  },
+  "castUnmute": {
+    "message": "Riattiva l'audio"
+  },
+  "castVolume": {
+    "message": "Volume della TV"
+  },
+  "castVolumeFixed": {
+    "message": "Il volume si regola dalla TV (fisso su questo dispositivo)"
+  },
+  "castSubsOff": {
+    "message": "Nessun sottotitolo"
+  },
+  "castVideoAuto": {
+    "message": "Qualità scelta dalla TV (percorso diretto): usa il percorso tramite app locale per sceglierla"
+  },
+  "castRetry": {
+    "message": "Trasmetti di nuovo"
+  },
+  "castClose": {
+    "message": "chiudi"
+  },
   "hint429": {
     "message": "Il sito sta limitando le richieste (troppe insieme). Aspetta qualche minuto, riduci download contemporanei e connessioni nelle impostazioni, poi riprova."
   },

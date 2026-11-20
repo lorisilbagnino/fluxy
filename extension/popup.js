@@ -7,6 +7,7 @@ import {
   t, UI_LANG, translate, $, send, el, langLabel, nameIsJustLang, prettyCodec, listFmt, channelsLabel,
   fmtBitrate, fmtDuration, fmtSize, renderJob, sortJobs, setRerender, restoreEditFocus, renderOverall, speedLimitControl,
 } from './ui.js';
+import { castShown, castDragging, renderCastManager, devicePicker, routePicker } from './cast-ui.js';
 
 let tabId = null;
 let tabTitle = '';
@@ -17,6 +18,9 @@ let lastStreamsSig = '';
 let armedTabs = [];
 let lastStreams = [];
 let lastScan = null;       // {blobVideos, drmVideos} from the page scan
+let castState = null;      // storage.session "cast": the session shown by the stream manager
+let castDevices = null;    // storage.session "castDevices": {devices, searching, error}
+let castPrefs = null;      // storage.local "castPrefs": {deviceId, route}
 
 // ------------------------------------------------------------- defaults ---
 function preferredLangs() {
@@ -55,6 +59,9 @@ function initSelection(stream) {
     videoId: d.video[0]?.id || null,
     audioIds, subIds,
     container: settings.container || 'mkv',
+    mode: 'download',                                  // or 'cast': same choices, sent to a TV
+    castAudioId: [...audioIds][0] || null,             // a TV plays one audio track and one subtitle track
+    castSubId: null,
     filename: cleanTitle((stream.from === 'scan' && stream.title) || tabTitle || stream.title),
   };
   return selection[stream.id];
@@ -198,6 +205,7 @@ const embedName = (u) => {
 function renderFileBody(s, d, body) {
   const sel = initSelection(s);
   if (s.title) body.append(el('div', { class: 'file-title', title: s.title }, s.title));
+  body.append(modeSwitch(sel));
   body.append(el('div', {}, el('div', { class: 'group-title' }, d.audioOnly ? t('audio') : t('video')),
     el('div', { class: 'opts' }, d.video.map((v) => el('label', { class: 'opt' },
       el('input', { type: 'radio', name: `v-${s.id}`, checked: sel.videoId === v.id, onchange: () => { sel.videoId = v.id; } }),
@@ -216,10 +224,63 @@ function renderFileBody(s, d, body) {
     },
   }, t('download'));
   const ext = () => (d.video.find((v) => v.id === sel.videoId) || d.video[0])?.ext || '';
+  if (sel.mode === 'cast') { body.append(...castActions(s, sel).filter(Boolean)); return; }
   body.append(dlError, el('div', { class: 'actions' },
     el('input', { type: 'text', value: sel.filename, title: t('fileName'), 'data-focus-key': `fn-${s.id}`, oninput: (e) => { sel.filename = e.target.value; } }),
     el('span', { class: 'file-ext', title: t('fileOriginal') }, `.${ext()}`),
     download));
+}
+
+// ------------------------------------------------------------------ cast ---
+/** "Download | Cast" switch at the top of a stream card. */
+function modeSwitch(sel) {
+  const set = (mode) => {
+    sel.mode = mode;
+    if (mode === 'cast') {
+      send({ type: 'hostCheck' });
+      if (!castDevices?.devices?.length && !castDevices?.searching) send({ type: 'castDiscover' });
+    }
+    renderStreams(lastStreams, true);
+  };
+  return el('div', { class: 'seg mode-switch' },
+    el('button', { class: sel.mode !== 'cast' ? 'on' : '', onclick: () => set('download') }, `⬇ ${t('download')}`),
+    el('button', { class: sel.mode === 'cast' ? 'on' : '', onclick: () => set('cast') }, `📺 ${t('castTo')}`));
+}
+
+const saveCastPrefs = (patch) => chrome.storage.local.set({ castPrefs: { route: 'relay', ...castPrefs, ...patch } });
+
+/** Cast mode: TV, route and the "Cast" button (instead of file name, format and "Download"). */
+function castActions(s, sel) {
+  if (hostState?.status !== 'ok') {
+    return [el('div', { class: 'notice soft cast-need' },
+      hostState?.status ? t('castNeedsApp') : t('castCheckingApp'), ' ',
+      hostState?.status ? el('button', { class: 'link', onclick: () => openSettings(true) }, t('installLocalAppLink')) : null)];
+  }
+  const err = el('div', { class: 'err', hidden: true });
+  const go = el('button', {
+    class: 'primary', disabled: !castDevices?.devices?.some((d) => d.id === castPrefs?.deviceId),
+    onclick: async () => {
+      go.disabled = true;
+      const r = await send({ type: 'castStart', tabId, streamId: s.id, videoId: sel.videoId, audioId: sel.castAudioId, subId: sel.castSubId, title: sel.filename });
+      err.textContent = r?.error || ''; err.hidden = !r?.error;
+      go.disabled = false;
+    },
+  }, t('castStartBtn'));
+  return [err,
+    el('div', { class: 'actions cast-actions' }, devicePicker(castDevices, castPrefs, { onChange: saveCastPrefs }), go),
+    el('div', { class: 'cast-route-row' }, routePicker(castPrefs, { onChange: saveCastPrefs }),
+      el('small', { class: 'muted' }, (castPrefs?.route || 'relay') === 'direct' ? t('castRouteDirectHelp') : t('castRouteRelayHelp'))),
+    castDevices?.error ? el('div', { class: 'err' }, castDevices.error) : null,
+    !castDevices?.searching && castDevices?.at && !castDevices?.devices?.length ? el('div', { class: 'muted hint' }, t('castNoneFound')) : null];
+}
+
+function renderCast(c = castState) {
+  castState = c;
+  const shown = castShown(c);
+  $('#cast-head').hidden = !shown;
+  if (!shown) $('#cast').replaceChildren();
+  else if (!castDragging()) $('#cast').replaceChildren(renderCastManager(c));
+  renderJobs(lastJobs);     // the stream manager takes the place of the downloads
 }
 
 function renderStream(s) {
@@ -266,7 +327,9 @@ function renderStream(s) {
   if (d.kind === 'file') { renderFileBody(s, d, body); return card; }
 
   const sel = initSelection(s);
-  const update = () => { download.disabled = !sel.videoId && sel.audioIds.size === 0 && sel.subIds.size === 0; };
+  const casting = sel.mode === 'cast';
+  const update = () => { if (!casting) download.disabled = !sel.videoId && sel.audioIds.size === 0 && sel.subIds.size === 0; };
+  body.append(modeSwitch(sel));
 
   if (d.live) body.append(el('div', { class: 'err' }, t('liveStream')));
   if (d.encryption) body.append(el('div', { class: 'muted' }, t('encryptionOk', d.encryption)));
@@ -288,7 +351,7 @@ function renderStream(s) {
         prettyCodec(v.codec), fmtBitrate(v.bandwidth),
       ].filter(Boolean).join(' · ')),
     ));
-    if (d.audio.length || !d.video.every((v) => v.hasAudio)) {
+    if (!casting && (d.audio.length || !d.video.every((v) => v.hasAudio))) {
       opts.push(el('label', { class: 'opt' },
         el('input', { type: 'radio', name: `v-${s.id}`, checked: sel.videoId === null, onchange: () => { sel.videoId = null; update(); } }),
         el('span', { class: 'main muted' }, t('noVideo'))));
@@ -301,10 +364,12 @@ function renderStream(s) {
     body.append(el('div', {},
       el('div', { class: 'group-title' }, t('audio')),
       el('div', { class: 'opts' }, d.audio.map((a) => el('label', { class: 'opt' },
-        el('input', {
-          type: 'checkbox', checked: sel.audioIds.has(a.id),
-          onchange: (e) => { e.target.checked ? sel.audioIds.add(a.id) : sel.audioIds.delete(a.id); update(); },
-        }),
+        casting
+          ? el('input', { type: 'radio', name: `ca-${s.id}`, checked: sel.castAudioId === a.id, onchange: () => { sel.castAudioId = a.id; } })
+          : el('input', {
+            type: 'checkbox', checked: sel.audioIds.has(a.id),
+            onchange: (e) => { e.target.checked ? sel.audioIds.add(a.id) : sel.audioIds.delete(a.id); update(); },
+          }),
         el('span', { class: 'main' }, langLabel(a.lang),
           !nameIsJustLang(a.name, a.lang) ? el('span', { class: 'muted' }, ` — ${a.name}`) : null),
         el('span', { class: 'tag' }, [prettyCodec(a.codec), channelsLabel(a.channels), fmtBitrate(a.bandwidth)].filter(Boolean).join(' · ')),
@@ -316,15 +381,21 @@ function renderStream(s) {
   if (d.subs.length) {
     body.append(el('div', {},
       el('div', { class: 'group-title' }, t('subtitles')),
-      el('div', { class: 'opts' }, d.subs.map((tr) => el('label', { class: 'opt' },
-        el('input', {
-          type: 'checkbox', checked: sel.subIds.has(tr.id),
-          onchange: (e) => { e.target.checked ? sel.subIds.add(tr.id) : sel.subIds.delete(tr.id); update(); },
-        }),
+      el('div', { class: 'opts' },
+        casting ? el('label', { class: 'opt' },
+          el('input', { type: 'radio', name: `cs-${s.id}`, checked: !sel.castSubId, onchange: () => { sel.castSubId = null; } }),
+          el('span', { class: 'main muted' }, t('castSubsOff'))) : null,
+        d.subs.map((tr) => el('label', { class: 'opt' },
+        casting
+          ? el('input', { type: 'radio', name: `cs-${s.id}`, checked: sel.castSubId === tr.id, onchange: () => { sel.castSubId = tr.id; } })
+          : el('input', {
+            type: 'checkbox', checked: sel.subIds.has(tr.id),
+            onchange: (e) => { e.target.checked ? sel.subIds.add(tr.id) : sel.subIds.delete(tr.id); update(); },
+          }),
         el('span', { class: 'main' }, langLabel(tr.lang),
           !nameIsJustLang(tr.name, tr.lang) ? el('span', { class: 'muted' }, ` — ${tr.name}`) : null,
           tr.forced ? el('span', { class: 'badge' }, t('forced')) : null),
-        el('button', {
+        casting ? null : el('button', {
           class: 'link srt', title: t('srtTitle'),
           onclick: async (e) => {
             e.preventDefault();   // inside the <label>: don't toggle the checkbox
@@ -360,6 +431,7 @@ function renderStream(s) {
   }, t('download'));
   // (no alert(): popups can't show it in Firefox)
   const dlError = el('div', { class: 'err', hidden: true });
+  if (casting) { body.append(...castActions(s, sel).filter(Boolean)); return card; }
   body.append(dlError,
     el('div', { class: 'actions' },
       el('input', {
@@ -378,7 +450,11 @@ let lastJobs = {};
 function renderJobs(jobs) {
   lastJobs = jobs || {};
   const list = sortJobs(jobs);
-  $('#jobs-head').hidden = list.length === 0;
+  const casting = castShown(castState);
+  for (const id of ['#jobs-overall', '#jobs']) $(id).hidden = casting;
+  $('#btn-cast-downloads').hidden = !casting || !list.length;
+  $('#btn-cast-downloads').textContent = t('castDownloadsLink', list.filter((j) => ['running', 'saving', 'queued', 'paused'].includes(j.state)).length);
+  $('#jobs-head').hidden = list.length === 0 || casting;
   $('#btn-clear-jobs').hidden = !list.some((j) => ['done', 'error', 'cancelled'].includes(j.state));
   // the popup keeps it short: active, paused and failed downloads plus the latest finished ones
   const shown = list.filter((j, i) => !['done', 'cancelled'].includes(j.state) || i < 3).slice(0, 8);
@@ -416,7 +492,10 @@ async function init() {
   $('#btn-open-page').addEventListener('click', async () => { await send({ type: 'openPage', page: 'downloads' }); window.close(); });
 
   const key = `tab:${tabId}`;
-  const data = await chrome.storage.session.get([key, 'host', 'armed']);
+  const data = await chrome.storage.session.get([key, 'host', 'armed', 'cast', 'castDevices']);
+  castDevices = data.castDevices || null;
+  castPrefs = (await chrome.storage.local.get('castPrefs')).castPrefs || null;
+  castState = data.cast || null;
   const { jobs } = await chrome.storage.local.get('jobs');
   armedTabs = data.armed || [];
   renderDetect();
@@ -424,12 +503,16 @@ async function init() {
   lastScan = data[key]?.scan || null;
   renderStreams(data[key]?.streams || []);
   renderJobs(jobs);
+  renderCast();
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.jobs) renderJobs(changes.jobs.newValue);
+    if (area === 'local' && changes.castPrefs) { castPrefs = changes.castPrefs.newValue; renderStreams(lastStreams, true); }
+    if (area === 'session' && changes.cast) renderCast(changes.cast.newValue || null);
+    if (area === 'session' && changes.castDevices) { castDevices = changes.castDevices.newValue; renderStreams(lastStreams, true); }
     if (area !== 'session') return;
     if (changes[key]) { lastScan = changes[key].newValue?.scan || null; renderStreams(changes[key].newValue?.streams || []); }
-    if (changes.host) renderHost(changes.host.newValue);
+    if (changes.host) { renderHost(changes.host.newValue); renderStreams(lastStreams, true); }
     if (changes.armed) {
       armedTabs = changes.armed.newValue || [];
       renderDetect();
@@ -449,6 +532,8 @@ async function init() {
   $('#speed-limit').replaceWith(speedLimitControl());
   $('#btn-clear-jobs').addEventListener('click', () => send({ type: 'clearFinished' }));
   $('#btn-manager').addEventListener('click', async () => { await send({ type: 'openPage', page: 'downloads' }); window.close(); });
+  $('#btn-cast-page').addEventListener('click', async () => { await send({ type: 'openPage', page: 'cast' }); window.close(); });
+  $('#btn-cast-downloads').addEventListener('click', async () => { await send({ type: 'openPage', page: 'downloads' }); window.close(); });
   // Videos in the page itself (no playback needed): scanned every time the popup opens.
   send({ type: 'scan', tabId });
   // The local app is only started when it is the chosen engine (or the settings are opened).

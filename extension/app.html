@@ -8,13 +8,14 @@
   <link rel="stylesheet" href="app.css">
   <link rel="stylesheet" href="settings.css">
 </head>
-<!-- The Fluxy page: downloads, settings, about. Tabs follow the URL hash (#downloads, #settings, #about).
+<!-- The Fluxy page: downloads, cast, settings, about. Tabs follow the URL hash (#downloads, #cast, #settings, #about).
      Texts: data-i18n (text), data-i18n-title — keys in _locales/*/messages.json -->
 <body>
   <header>
     <div class="brand"><img src="icons/icon48.png" alt="" width="32" height="32"><span>Fluxy</span></div>
     <nav role="tablist">
       <a role="tab" href="#downloads" data-tab="downloads" data-i18n="tabDownloads"></a>
+      <a role="tab" href="#cast" data-tab="cast" data-i18n="tabCast"></a>
       <a role="tab" href="#settings" data-tab="settings" data-i18n="tabSettings"></a>
       <a role="tab" href="#about" data-tab="about" data-i18n="tabAbout"></a>
     </nav>
@@ -35,6 +36,23 @@
       <div id="overall"></div>
       <div id="list"></div>
       <p id="empty" class="muted" data-i18n="noDownloads" hidden></p>
+    </section>
+
+    <section id="tab-cast" role="tabpanel" hidden>
+      <div class="toolbar"><h2 data-i18n="tabCast"></h2></div>
+      <div id="cast-now"></div>
+      <p id="cast-empty" class="muted" data-i18n="castEmpty" hidden></p>
+      <p id="cast-noapp" class="notice" hidden></p>
+      <div class="toolbar"><h3 data-i18n="castDevicesTitle"></h3><span class="spacer"></span>
+        <button id="btn-cast-search" class="ghost" data-i18n="castSearch"></button></div>
+      <div id="cast-devices" class="cast-devices"></div>
+      <form id="cast-add" class="cast-add">
+        <input id="cast-address" type="text" spellcheck="false" autocomplete="off">
+        <button class="ghost" data-i18n="castAdd"></button>
+      </form>
+      <p id="cast-add-error" class="err" hidden></p>
+      <p class="muted help" data-i18n="castAddHelp"></p>
+      <p class="muted help" data-i18n="castFirewall"></p>
     </section>
 
     <section id="tab-settings" role="tabpanel" hidden>

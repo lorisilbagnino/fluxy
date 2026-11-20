@@ -55,6 +55,8 @@ cosa tenere e li ricompone in un unico file pronto per qualsiasi player.
 • Scegli i sottotitoli per lingua, compresi quelli "forced", oppure scaricali come file .srt separati.
 • Ottieni un MKV (consigliato) o un MP4, con lingue e tracce predefinite già impostate.
 • Nessuna ricodifica: i dati vengono copiati così come sono, senza perdita di qualità e in pochi secondi.
+• Oppure trasmettilo alla TV (Chromecast o TV DLNA, con l'app locale): scegli qualità, audio e sottotitoli e
+  controlla la riproduzione dal popup.
 
 Un vero download manager
 • Video, audio e sottotitoli si scaricano in parallelo, con il numero di connessioni che scegli.
@@ -120,6 +122,8 @@ puts them back together into a single file that plays anywhere.
 • Pick subtitles by language, including "forced" ones, or save them as separate .srt files.
 • Get an MKV (recommended) or an MP4, with languages and default tracks already set.
 • No re-encoding: data is copied as is, with no quality loss and in seconds.
+• Or cast it to your TV (Chromecast or DLNA TV, with the local app): pick quality, audio and subtitles and control
+  playback from the popup.
 
 A real download manager
 • Video, audio and subtitles download in parallel, over as many connections as you choose.

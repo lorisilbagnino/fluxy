@@ -214,6 +214,32 @@ If you register the app from the repository with `./host/install.sh` and then mo
   (local app: until the merge finishes).
 - Removing a paused or failed download deletes its staged data.
 
+## Cast to a TV (local app)
+
+Every stream card has a **Download | Cast** switch. In *Cast* mode you pick the video quality, **one** audio track
+and **one** subtitle track (or none), then the TV and the route, and press **Cast to TV**. While a cast is on, the popup
+shows the **stream manager** instead of the downloads (play/pause, −10 s / +30 s, position, volume and mute, change of
+video/audio/subtitles, stop); the Fluxy page has the same manager in the **Cast** tab, with the list of TVs, "search
+again" and "add by address".
+
+| | Chromecast / Google TV | DLNA TV |
+|---|---|---|
+| Discovery | mDNS (`_googlecast._tcp`, UDP 5353) | SSDP (UDP 1900) |
+| Control | Cast v2 (TLS, port 8009), Google's Default Media Receiver | UPnP AVTransport + RenderingControl (SOAP) |
+| **Direct** route | the TV loads the original URL (HLS/DASH/file) | the TV loads the original URL (HLS/file) |
+| **Through the local app** | HLS: master playlist with the chosen variant, proxied with the page's headers and CORS; files: proxied with Range; DASH/yt-dlp pages: remuxed to fragmented MP4 | everything remuxed by ffmpeg (stream copy) to MPEG-TS; files proxied with Range |
+| Audio / subtitles | switched live (tracks of the receiver; subtitles side-loaded as WebVTT) | reload at the current position; subtitles as SRT (Samsung `CaptionInfoEx`) |
+
+- Everything goes through the local app (`fluxy_host.py`, standard library only): Chrome extensions can't load Google's
+  Cast SDK (remote code is not allowed in MV3, not even outside the store), and Firefox has no Cast support at all.
+- *Direct* is lighter but many sites refuse the TV's requests (no cookies/Referer, no CORS): the default is *through the
+  local app*. With remuxed streams a seek restarts ffmpeg from the new position.
+- **Firewall**: discovery uses UDP 5353 and 1900; with the relay the TV connects to this PC on **TCP 8790**
+  (`FLUXY_RELAY_PORT` to change it). If no TV shows up, add it by address (Chromecast IP, or the DLNA description URL).
+- Store builds cast everything except YouTube; the GitHub builds also cast YouTube and the other yt-dlp sites.
+- Not supported: Miracast (screen mirroring of the operating system, not reachable from an app), AirPlay, and apps with
+  undocumented protocols (e.g. Web Video Caster). Fire TV works through a DLNA renderer app.
+
 ### Don't overload the sites
 
 Some providers block the IP address, sometimes for days, when they receive too many requests at once. The settings

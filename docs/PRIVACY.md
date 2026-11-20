@@ -1,6 +1,6 @@
 # Fluxy – Informativa sulla privacy
 
-*Ultimo aggiornamento: 16 novembre 2026*
+*Ultimo aggiornamento: 20 novembre 2026*
 
 **In breve: Fluxy non raccoglie, non conserva e non invia a nessuno dati personali o sulla tua navigazione.**
 
@@ -26,6 +26,11 @@
 - **App locale (facoltativa).** Se la installi, l'estensione le passa gli stessi dati (indirizzi e header dello
   stream) per eseguire il download sul tuo computer. Il programma scrive un registro in `~/.cache/fluxy/host.log`
   con cookie e Authorization oscurati.
+- **Trasmissione alla TV (app locale).** Per trasmettere, l'estensione passa all'app locale indirizzi e header dello
+  stream scelto. L'app cerca le TV nella rete di casa e, con il percorso "tramite app locale", serve lo stream alla
+  TV da questo computer attraverso la rete, a un indirizzo casuale valido finché la trasmissione è attiva (i
+  sottotitoli convertiti restano in `~/.cache/fluxy` fino alla fine della trasmissione); con il
+  percorso "diretto" la TV riceve l'indirizzo originale dello stream. Niente passa da server di Fluxy.
 
 ## Cosa Fluxy non fa
 
@@ -43,7 +48,7 @@ Per domande: apri una segnalazione nel repository del progetto.
 
 # Fluxy – Privacy policy
 
-*Last updated: 16 November 2026*
+*Last updated: 20 November 2026*
 
 **In short: Fluxy does not collect, store or send anyone personal data or data about your browsing.**
 
@@ -66,6 +71,11 @@ Per domande: apri una segnalazione nel repository del progetto.
 - **Local app (optional).** If you install it, the extension passes it the same data (stream addresses and headers)
   to run the download on your computer. It keeps a log in `~/.cache/fluxy/host.log` with cookies and Authorization
   redacted.
+- **Casting to a TV (local app).** To cast, the extension passes the chosen stream's addresses and headers to the
+  local app. The app looks for TVs on the home network and, with the "through the local app" route, serves the stream
+  to the TV from this computer over the network, at a random address valid while the cast is on (converted subtitles
+  stay in `~/.cache/fluxy` until the cast ends); with the
+  "direct" route the TV gets the stream's original address. Nothing goes through Fluxy servers.
 - Fluxy has no servers, analytics, ads or tracking; it does not read page content (other than the video addresses described above), record browsing history, or sell
   or share any data.
 
