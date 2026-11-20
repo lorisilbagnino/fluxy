@@ -125,6 +125,10 @@ TEXT = {
         "This TV can't play this stream by itself: use the local app route": "Questa TV non può riprodurre lo stream da sola: usa il percorso tramite app locale",
         "TV not found: search again": "TV non trovata: cerca di nuovo",
         "No TV answers at {address}": "Nessuna TV risponde all'indirizzo {address}",
+        "The TV can't reach this PC on port {port}: a firewall is probably blocking it.": "La TV non riesce a collegarsi a questo PC sulla porta {port}: probabilmente la blocca un firewall.",
+        "With ufw: {cmd}": "Con ufw: {cmd}",
+        "With firewalld: {cmd}": "Con firewalld: {cmd}",
+        "Can't connect to the TV ({reason})": "Impossibile collegarsi alla TV ({reason})",
         "Downloading {n} tracks": "Download di {n} tracce in parallelo",
         "Nothing left to download: every track was skipped": "Niente da scaricare: tutte le tracce sono state saltate",
         "{label} file not found after the download": "File {label} non trovato dopo il download",
@@ -1468,7 +1472,7 @@ class CastV2:
                     box["ev"].set()
         except Exception as e:  # noqa: BLE001
             if not self.closed:
-                log("cast reader", e)
+                log("cast reader: the TV closed the connection", e)
                 self.closed = True
                 self.on_event({"type": "closed", "error": str(e)})
 
@@ -1688,6 +1692,7 @@ class _RelayHandler(http.server.BaseHTTPRequestHandler):
         if not route:
             self.send_error(404)
             return
+        route.hits = getattr(route, "hits", 0) + 1
         try:
             route.serve(self, parts[2], parts[3] if len(parts) > 3 else "", head)
         except (BrokenPipeError, ConnectionResetError):
@@ -2143,7 +2148,15 @@ class CastSession:
     def start(self):
         try:
             if self.device["kind"] == "chromecast":
-                self.ctl = CastV2(self.device["host"], self.device.get("port") or 8009, self.on_event)
+                for attempt in range(2):          # some receivers (e.g. AirScreen) refuse the first try now and then
+                    try:
+                        self.ctl = CastV2(self.device["host"], self.device.get("port") or 8009, self.on_event)
+                        break
+                    except (OSError, ssl.SSLError) as e:
+                        log("cast connect", self.device["host"], e)
+                        if attempt:
+                            raise RuntimeError(T("Can't connect to the TV ({reason})", reason=e)) from None
+                        time.sleep(1.5)
                 self.ctl.launch()
             else:
                 self.ctl = Dlna(self.device, self.on_event)
@@ -2182,8 +2195,7 @@ class CastSession:
                 proxy.master = self.synth_master(proxy)
                 url = base + "m/master.m3u8"
             else:
-                proxy = ProxyRoute(self.headers, subs=subs)      # only for the subtitle files
-                base = self.new_route(proxy) if subs else ""
+                base = ""                                        # direct: the TV needs nothing from this PC
                 url = self.spec["url"]
             v, a = self.video(), self.audio()
             fa, fv = _hls_formats((a or v or {}).get("url") or self.spec["url"], self.headers)
@@ -2196,14 +2208,14 @@ class CastSession:
             url = (self.video() or {}).get("url") if kind == "file" else self.spec["url"]
             url = url or self.spec["url"]
             media.update({"contentId": url, "contentUrl": url, "contentType": _guess_mime(url, kind)})
-            base = self.new_route(ProxyRoute(self.headers, subs=subs)) if subs else ""
+            base = ""
         elif self.route == "direct" and kind == "page":
             v = self.video()
             if not (v and v.get("hasAudio")):
                 raise RuntimeError(T("This video has separate audio and video: use the local app route"))
             url = self.page_inputs()[0][0]
             media.update({"contentId": url, "contentUrl": url, "contentType": _guess_mime(url, "file")})
-            base = self.new_route(ProxyRoute(self.headers, subs=subs)) if subs else ""
+            base = ""
         elif kind == "file":
             proxy = ProxyRoute(self.headers, subs=subs)
             base = self.new_route(proxy)
@@ -2219,7 +2231,7 @@ class CastSession:
             if self.spec.get("duration"):
                 media["duration"] = max(0, self.spec["duration"] - self.offset)
         tracks, self.text_ids = [], {}
-        for j, s in enumerate(self.spec.get("subs") or []):
+        for j, s in enumerate(self.spec.get("subs") or [] if base else []):   # side-loaded WebVTT (relay only)
             tid = 100 + j
             self.text_ids[s["id"]] = tid
             tracks.append({"trackId": tid, "type": "TEXT", "subtype": "SUBTITLES", "trackContentId": f"{base}s/{j}.vtt",
@@ -2229,7 +2241,10 @@ class CastSession:
             media["tracks"] = tracks
         self.want_audio = True
         self.position, self.pos_at, self.rate = at, time.time(), 0
-        self.ctl.load(media, at, [100 + sub_j] if sub_j is not None else None)
+        log("cast load", self.device.get("model"), self.route, redact(json.dumps({k: v for k, v in media.items() if k != "tracks"})), "subs", len(tracks))
+        r = self.ctl.load(media, at, [100 + sub_j] if (sub_j is not None and tracks) else None)
+        log("cast load reply", (r.get("status") or [{}])[0].get("playerState"))
+        self.watch_relay()
 
     def load_dlna(self, at, kind, subs, sub_j):
         self.restart, self.offset = False, 0.0
@@ -2256,8 +2271,23 @@ class CastSession:
             self.restart, self.offset, at = True, at, 0
             self.ctl.load(base + "v/stream.ts", "video/mpeg", title, f"{base}s/{sub_j}.srt" if sub_j is not None else None, streaming=True)
         self.position, self.pos_at, self.rate = at, time.time(), 0
+        self.watch_relay()
         if at > 0 and not self.restart:
             threading.Thread(target=self._seek_when_playing, args=(at,), daemon=True).start()
+
+    def watch_relay(self):
+        """Relay route: if the TV never comes to fetch the video, say why (almost always a firewall on this PC)."""
+        route = self.relay_route
+        if self.route != "relay" or not route:
+            return
+        def check():
+            time.sleep(15)
+            if self.stopped or self.relay_route is not route or getattr(route, "hits", 0) or self.state == "playing":
+                return
+            self.state, self.error = "error", firewall_hint(self.device["host"])
+            log("cast: the TV never fetched the relay", self.device["host"])
+            self.emit(force=True)
+        threading.Thread(target=check, daemon=True).start()
 
     def _seek_when_playing(self, at: float):
         for _ in range(30):
@@ -2283,7 +2313,15 @@ class CastSession:
         sid = self.sel.get("subId")
         if sid in self.text_ids:
             ids.append(self.text_ids[sid])
-        if ids or self.text_ids:
+        elif sid:      # direct route: the subtitle tracks the receiver found in the playlist
+            want = self.find("subs", sid) or {}
+            lang = (want.get("lang") or "").lower().split("-")[0]
+            text = [x for x in self.rx_tracks if x.get("type") == "TEXT"]
+            hit = next((x for x in text if (x.get("name") or "") == (want.get("name") or "") and (x.get("language") or "").lower().startswith(lang)), None) \
+                or next((x for x in text if lang and (x.get("language") or "").lower().startswith(lang)), None)
+            if hit:
+                ids.append(hit["trackId"])
+        if ids or self.text_ids or any(x.get("type") == "TEXT" for x in self.rx_tracks):
             self.ctl.set_tracks(ids)
 
     # -- commands from the extension -------------------------------------------------------
@@ -2341,6 +2379,17 @@ class CastSession:
 
     def active(self) -> bool:
         return not self.stopped and self.state not in ("idle", "ended", "error", "stopped")
+
+
+def firewall_hint(device_host: str) -> str:
+    port = RELAY.port or RELAY_PORT
+    net = ".".join(lan_ip_for(device_host).split(".")[:3]) + ".0/24"
+    msg = T("The TV can't reach this PC on port {port}: a firewall is probably blocking it.", port=port)
+    if shutil.which("ufw") or os.path.exists("/etc/ufw/ufw.conf"):
+        msg += " " + T("With ufw: {cmd}", cmd=f"sudo ufw allow from {net} to any port {port} proto tcp")
+    elif shutil.which("firewall-cmd"):
+        msg += " " + T("With firewalld: {cmd}", cmd=f"sudo firewall-cmd --permanent --add-port={port}/tcp && sudo firewall-cmd --reload")
+    return msg
 
 
 def cast_ticker():
