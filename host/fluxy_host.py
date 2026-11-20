@@ -1661,6 +1661,13 @@ def lan_ip_for(host: str) -> str:
         s.close()
 
 
+class _RelayServer(http.server.ThreadingHTTPServer):
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        log("relay connection", client_address, sys.exc_info()[1])   # a TV closing a connection early: not an error
+
+
 class _RelayHandler(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "Fluxy"
@@ -1727,9 +1734,9 @@ class Relay:
         with self.lock:
             if not self.server:
                 try:      # a fixed port, so it can be opened once in the firewall
-                    self.server = http.server.ThreadingHTTPServer(("0.0.0.0", RELAY_PORT), _RelayHandler)
+                    self.server = _RelayServer(("0.0.0.0", RELAY_PORT), _RelayHandler)
                 except OSError:
-                    self.server = http.server.ThreadingHTTPServer(("0.0.0.0", 0), _RelayHandler)
+                    self.server = _RelayServer(("0.0.0.0", 0), _RelayHandler)
                 self.server.daemon_threads = True
                 self.port = self.server.server_address[1]
                 threading.Thread(target=self.server.serve_forever, daemon=True).start()
@@ -1766,6 +1773,23 @@ def _sub_file(url: str, headers: dict, fmt: str) -> bytes:
         return fh.read()
 
 
+SEGMENT_TYPES = {".ts": "video/mp2t", ".m4s": "video/mp4", ".aac": "audio/aac", ".ac3": "audio/ac3",
+                 ".ec3": "audio/eac3", ".mp3": "audio/mpeg"}
+
+
+def segment_ext(playlist: str):
+    """For a media playlist, a function giving each segment its real extension: with EXT-X-MAP the segments are
+    fragmented MP4, otherwise MPEG-TS (or raw audio when the site says so). None for master playlists."""
+    if "#EXTINF" not in playlist:
+        return None
+    if "#EXT-X-MAP" in playlist:
+        return lambda url: ".m4s"
+    def ext(url):
+        e = os.path.splitext(urllib.parse.urlparse(url).path)[1].lower()
+        return e if e in (".aac", ".ac3", ".ec3", ".mp3") else ".ts"
+    return ext
+
+
 class ProxyRoute:
     """Proxies the stream's URLs with the page's headers; HLS playlists are rewritten to point back here."""
 
@@ -1775,28 +1799,33 @@ class ProxyRoute:
         self.subs = subs or []        # [(url, headers)]
         self.urls: list[str] = []
         self.ids: dict = {}
+        self.types: dict = {}         # id -> Content-Type to send (some sites disguise segments as .html/.m4s)
         self.token = None
         self.lock = threading.Lock()
 
     def close(self):
         pass
 
-    def ref(self, url: str) -> str:
+    def ref(self, url: str, ext: str | None = None) -> str:
         with self.lock:
             if url not in self.ids:
                 self.ids[url] = len(self.urls)
                 self.urls.append(url)
             n = self.ids[url]
-        path = urllib.parse.urlparse(url).path
-        ext = os.path.splitext(path)[1][:6] if "." in os.path.basename(path) else ""
+        if ext is None:
+            path = urllib.parse.urlparse(url).path
+            ext = os.path.splitext(path)[1][:6] if "." in os.path.basename(path) else ""
+        else:
+            self.types[n] = SEGMENT_TYPES.get(ext)
         return f"/{self.token}/u/{n}{ext}"
 
     def rewrite(self, text: str, base: str) -> str:
+        seg_ext = segment_ext(text)   # media playlists: segments get their real extension, whatever the site calls them
         out = []
         for line in text.splitlines():
             s = line.strip()
             if s and not s.startswith("#"):
-                out.append(self.ref(urllib.parse.urljoin(base, s)))
+                out.append(self.ref(urllib.parse.urljoin(base, s), seg_ext(urllib.parse.urljoin(base, s)) if seg_ext else None))
             elif s.startswith("#") and 'URI="' in s:
                 out.append(re.sub(r'URI="([^"]+)"', lambda m: f'URI="{self.ref(urllib.parse.urljoin(base, m.group(1)))}"', s))
             else:
@@ -1829,8 +1858,11 @@ class ProxyRoute:
                 return h.reply(200, self.rewrite(text, r.geturl()).encode(), "application/vnd.apple.mpegurl", head)
             h.send_response(r.status)
             h.cors()
+            forced = self.types.get(int(re.match(r"\d+", rest).group(0)))
+            if forced:
+                h.send_header("Content-Type", forced)
             for k in ("Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"):
-                if r.headers.get(k):
+                if r.headers.get(k) and not (forced and k == "Content-Type"):
                     h.send_header(k, r.headers[k])
             h.send_header("transferMode.dlna.org", "Streaming")
             h.end_headers()
@@ -1934,7 +1966,7 @@ def _hls_formats(url: str, headers: dict) -> tuple[str | None, str | None]:
         return None, None
     seg = next((ln.strip() for ln in text.splitlines() if ln.strip() and not ln.startswith("#")), "")
     ext = os.path.splitext(urllib.parse.urlparse(seg).path)[1].lower()
-    if "#EXT-X-MAP" in text or ext in (".m4s", ".mp4", ".m4a", ".m4v", ".cmfv", ".cmfa"):
+    if "#EXT-X-MAP" in text:          # fragmented MP4 needs EXT-X-MAP: an .m4s name alone proves nothing
         return "fmp4", "fmp4"
     return {".aac": "aac", ".ac3": "ac3", ".ec3": "e_ac3", ".mp3": "mp3"}.get(ext, "ts"), "mpeg2_ts"
 
@@ -2121,7 +2153,8 @@ class CastSession:
                 nxt = next((x.strip() for x in lines[i + 1:] if x.strip() and not x.startswith("#")), "")
                 keep_next = not want or urllib.parse.urljoin(final, nxt) == want
                 if keep_next:
-                    out.append(line)
+                    # the subtitle renditions are dropped below: so is the reference to their group
+                    out.append(re.sub(r',SUBTITLES="[^"]*"', "", line))
                     want = want or "taken"
                 continue
             if s and not s.startswith("#"):
