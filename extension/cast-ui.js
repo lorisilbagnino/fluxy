@@ -29,6 +29,29 @@ export const deviceLabel = (d) => `${d.name}${d.audioOnly ? ` (${t('castAudioOnl
 const ctl = (c, action, value) => send({ type: 'castControl', sessionId: c.id, action, value });
 const pick = (c, kind, trackId) => send({ type: 'castSelect', sessionId: c.id, kind, trackId });
 
+/** "Allow the TV to connect" button: its progress survives the manager's rebuilds. */
+let allow = { busy: false, msg: null, err: false };
+
+/** Asks the local app to open the relay port (system password window), then casts again through it. */
+function allowButton(c, render) {
+  const run = async () => {
+    allow = { busy: true, msg: t('castAllowWaiting'), err: false };
+    render();
+    const r = await send({ type: 'castFirewall', allow: true });
+    if (r?.ok) {
+      allow = { busy: false, msg: t('castAllowDone'), err: false };
+      render();
+      await send({ type: 'castRetry', route: 'relay' });
+    } else {
+      allow = { busy: false, msg: r?.cancelled ? t('castAllowCancelled') : (r?.error || t('unknownError')), err: !r?.cancelled };
+      render();
+    }
+  };
+  return el('div', { class: 'cast-allow' },
+    el('button', { class: 'ghost', disabled: allow.busy, onclick: run }, `🔓 ${t('castAllow')}`),
+    el('small', { class: allow.err ? 'err' : 'muted' }, allow.msg || t('castAllowHelp')));
+}
+
 /** Where the position slider is being dragged: don't move it under the user's finger. */
 let dragging = false;
 
@@ -69,7 +92,7 @@ export function renderCastManager(c, { full = false } = {}) {
   };
   const sel = c.sel || {};
 
-  return el('div', { class: `cast${full ? ' full' : ''} ${c.state}` },
+  return el('div', { class: `cast${full ? ' full' : ''} ${c.state}`, 'data-session': c.id },
     el('div', { class: 'cast-head' },
       el('span', { class: 'cast-tv', 'aria-hidden': 'true' }, '📺'),
       el('div', { class: 'cast-what' },
@@ -96,6 +119,15 @@ export function renderCastManager(c, { full = false } = {}) {
       select('audio', tracks.audio, sel.audioId, caps.audio !== false, false, t('castTracksFixed')),
       select('subs', tracks.subs, sel.subId, caps.subs !== false, true, t('castTracksFixed'))),
     caps.audio === false && (tracks.audio.length > 1 || tracks.subs.length) ? el('div', { class: 'muted cast-note' }, t('castTracksFixed')) : null,
+    (caps.audio === false && (tracks.audio.length > 1 || tracks.subs.length)) || c.errorCode === 'firewall'
+      ? allowButton(c, () => {
+        const box = document.querySelector(`.cast[data-session="${c.id}"]`);
+        if (!box) return;
+        const node = renderCastManager(c, { full });
+        node.dataset.key = box.dataset.key;
+        box.replaceWith(node);
+      })
+      : null,
     ended ? el('div', { class: 'actions cast-end' },
       el('button', { class: 'link', onclick: () => send({ type: 'castDismiss' }) }, t('castClose'))) : null,
     full && c.pageUrl ? el('div', { class: 'muted cast-source' }, t('dSource'), ': ',

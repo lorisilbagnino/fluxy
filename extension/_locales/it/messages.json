@@ -574,6 +574,29 @@
   "castTracksFixed": {
     "message": "Questa TV riproduce da sola lo stream originale: audio e sottotitoli sono quelli che sceglie lei. Per sceglierli, trasmetti tramite app locale."
   },
+  "castAllow": {
+    "message": "Consenti alla TV di collegarsi al PC"
+  },
+  "castAllowHelp": {
+    "message": "Per scegliere audio e sottotitoli la TV deve prendere il video da questo PC: il sistema ti chiederà la password una volta per consentirlo dalla rete di casa."
+  },
+  "castAllowWaiting": {
+    "message": "In attesa della password nella finestra di sistema…"
+  },
+  "castAllowDone": {
+    "message": "Consentito: ritrasmissione tramite app locale…"
+  },
+  "castAllowCancelled": {
+    "message": "Annullato: non è stato cambiato nulla."
+  },
+  "castFirewallClosed": {
+    "message": "Il firewall di questo PC ($p1$) blocca le TV: la trasmissione funziona, ma audio e sottotitoli li scelgono loro.",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
   "castFirewall": {
     "message": "L'app locale cerca le TV sulle porte UDP 5353 (Chromecast) e 1900 (DLNA) e, con \"tramite app locale\", la TV prende il video da questo PC sulla porta TCP 8790: se il PC ha un firewall, consentile dalla rete di casa (con ufw: sudo ufw allow from 192.168.1.0/24 to any port 8790 proto tcp, e lo stesso con port 1900 proto udp per le TV DLNA)."
   },

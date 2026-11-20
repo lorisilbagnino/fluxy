@@ -19,6 +19,7 @@ function showTab() {
   }
   if (tab === 'settings' || tab === 'cast') send({ type: 'hostCheck' });
   if (tab === 'cast' && !castDevices?.at && !castDevices?.searching) send({ type: 'castDiscover' });
+  if (tab === 'cast') checkFirewall().catch(() => {});
 }
 window.addEventListener('hashchange', showTab);
 
@@ -80,6 +81,25 @@ function renderCastTab() {
     castDevices?.error ? el('p', { class: 'err' }, castDevices.error) : null,
     el('div', { class: 'cast-route-row' }, el('span', {}, t('castRouteLabel')), routePicker(castPrefs, { onChange: save }),
       el('small', { class: 'muted' }, routeHelp(castPrefs?.route || 'auto'))),
+  ].filter(Boolean));
+}
+// firewall of this PC (Linux): shown with the one-click permission when the relay port is closed
+let firewall = null;
+async function checkFirewall(allowIt = false) {
+  const r = await send({ type: 'castFirewall', allow: allowIt });
+  firewall = r && !r.error ? r : { ...firewall, error: r?.error };
+  if (allowIt && r?.cancelled) firewall.msg = t('castAllowCancelled');
+  renderFirewall();
+}
+function renderFirewall() {
+  const box = $('#cast-firewall');
+  const closed = firewall?.firewall && !firewall.open;
+  box.hidden = !closed && !firewall?.error;
+  box.replaceChildren(...[
+    el('span', {}, closed ? t('castFirewallClosed', firewall.firewall) : ''),
+    closed ? el('button', { class: 'ghost', onclick: async (e) => { e.target.disabled = true; e.target.textContent = t('castAllowWaiting'); await checkFirewall(true); } }, `🔓 ${t('castAllow')}`) : null,
+    firewall?.msg ? el('small', { class: 'muted' }, firewall.msg) : null,
+    firewall?.error ? el('small', { class: 'err' }, firewall.error) : null,
   ].filter(Boolean));
 }
 $('#cast-address').placeholder = t('castAddPlaceholder');

@@ -529,7 +529,7 @@ async function castStart({ tabId, streamId, videoId, audioId, subId, title }) {
 }
 
 /** "Cast again": same stream and tracks, on the TV that is playing it now, from the current position. */
-async function castRetry() {
+async function castRetry(forceRoute) {
   const c = await getCast();
   const { lastCastSpec: last } = await chrome.storage.session.get('lastCastSpec');
   if (!c || !last) return;
@@ -538,7 +538,7 @@ async function castRetry() {
   const device = known.find((d) => d.id === c.device?.id) || last.device;
   const twins = known.filter((d) => d.id !== device.id);
   // the route that worked is kept (a fallback already happened), otherwise the chosen one
-  const route = c.route && c.route !== (last.route === 'relay' ? 'relay' : 'direct') ? c.route : last.route;
+  const route = forceRoute || (c.route && c.route !== (last.route === 'relay' ? 'relay' : 'direct') ? c.route : last.route);
   await chrome.storage.session.set({ cast: { ...c, id, state: 'connecting', error: null, note: null } });
   hostSend({ type: 'castStart', sessionId: id, deviceId: device.id, device, twins, route,
     startAt: ['ended'].includes(c.state) ? 0 : Math.max(0, (c.position || 0) - 2), spec: { ...last.spec, sel: c.sel } });
@@ -548,7 +548,7 @@ async function castRetry() {
 function onCastEvent(msg) {
   return mutateCast((c) => {
     if (c.id !== msg.sessionId) return;
-    for (const k of ['state', 'error', 'position', 'duration', 'volume', 'muted', 'sel', 'caps', 'route', 'note']) {
+    for (const k of ['state', 'error', 'position', 'duration', 'volume', 'muted', 'sel', 'caps', 'route', 'note', 'errorCode', 'mode']) {
       if (msg[k] !== undefined) c[k] = msg[k];
     }
     if (msg.device?.id && msg.device.id !== c.device?.id) c.device = { ...c.device, ...msg.device };
@@ -1296,7 +1296,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
       case 'castStart': return { sessionId: await castStart(msg) };
       case 'castControl': case 'castSelect': await castCommand(msg); return {};
       case 'castStop': await castStop(); return {};
-      case 'castRetry': await castRetry(); return {};
+      case 'castRetry': await castRetry(msg.route); return {};
+      // firewall of this PC: status, or ask the system to allow the relay port (password window, up to 5 minutes)
+      case 'castFirewall': return await hostRequest({ type: 'castFirewall', allow: !!msg.allow }, msg.allow ? 310_000 : 15_000);
       case 'castDismiss': await chrome.storage.session.remove('cast'); return {};
       case 'clearTab': await clearTab(msg.tabId); return {};
       case 'arm': await armTab(msg.tabId); return {};
