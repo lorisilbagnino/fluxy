@@ -46,7 +46,7 @@ export function renderCastManager(c, { full = false } = {}) {
     oninput: (e) => { dragging = true; e.target.closest('.cast').querySelector('.cast-pos').textContent = fmtTime(e.target.value); },
     onchange: (e) => { dragging = false; ctl(c, 'seek', Number(e.target.value)); },
   });
-  const button = (label, title, onclick, cls = '') => el('button', { class: `ghost cast-btn ${cls}`, title, 'aria-label': title, disabled: ended, onclick }, label);
+  const button = (label, title, onclick, cls = '') => el('button', { class: `ghost cast-btn ${cls}`, title, 'aria-label': title, disabled: ended && label !== '⏹', onclick }, label);
 
   const volume = el('input', {
     type: 'range', class: 'cast-vol', min: 0, max: 100, step: 1, value: Math.round((c.volume ?? 0.5) * 100),
@@ -74,7 +74,7 @@ export function renderCastManager(c, { full = false } = {}) {
       el('span', { class: 'cast-tv', 'aria-hidden': 'true' }, '📺'),
       el('div', { class: 'cast-what' },
         el('div', { class: 'cast-title', title: c.title || '' }, c.title || '—'),
-        el('div', { class: 'cast-dev muted' }, [c.device?.name, c.route === 'direct' ? t('castRouteDirect') : t('castRouteRelay')].filter(Boolean).join(' · '))),
+        el('div', { class: 'cast-dev muted' }, [c.device?.name, c.route === 'direct' ? t('castRouteDirect') : c.route === 'relay' ? t('castRouteRelay') : null].filter(Boolean).join(' · '))),
       el('span', { class: `cast-state ${c.state}` }, busy ? el('span', { class: 'spinner' }) : null, t(`castState_${c.state}`) || c.state)),
     c.note && !c.error ? el('div', { class: 'muted cast-note' }, c.note) : null,
     c.error ? el('div', { class: 'err' }, c.error, c.route === 'direct' ? el('span', { class: 'hint' }, ` ${t('castDirectHint')}`) : null) : null,
@@ -84,6 +84,7 @@ export function renderCastManager(c, { full = false } = {}) {
       button(playing ? '⏸' : '▶', playing ? t('castPause') : t('castPlay'), () => ctl(c, playing ? 'pause' : 'play'), 'accent'),
       button('⏩', t('castForward'), () => ctl(c, 'seekBy', 30)),
       button('⏹', t('castStop'), () => send({ type: 'castStop' })),
+      el('button', { class: 'ghost cast-btn', title: t('castRecastTitle'), 'aria-label': t('castRecastTitle'), onclick: () => send({ type: 'castRetry' }) }, '↻'),
       el('span', { class: 'spacer' }),
       el('button', {
         class: 'link cast-mute', disabled: ended || c.muted == null, title: c.muted ? t('castUnmute') : t('castMute'),
@@ -91,11 +92,11 @@ export function renderCastManager(c, { full = false } = {}) {
       }, c.muted ? '🔇' : '🔊'),
       volume),
     el('div', { class: 'cast-tracks' },
-      select('video', tracks.video, sel.videoId, caps.video, false, t('castVideoAuto')),
-      select('audio', tracks.audio, sel.audioId, caps.audio !== false, false, ''),
-      select('subs', tracks.subs, sel.subId, caps.subs !== false, true, '')),
+      select('video', tracks.video, sel.videoId, caps.video, false, c.route === 'direct' && c.device?.kind === 'dlna' ? t('castTracksFixed') : t('castVideoAuto')),
+      select('audio', tracks.audio, sel.audioId, caps.audio !== false, false, t('castTracksFixed')),
+      select('subs', tracks.subs, sel.subId, caps.subs !== false, true, t('castTracksFixed'))),
+    caps.audio === false && (tracks.audio.length > 1 || tracks.subs.length) ? el('div', { class: 'muted cast-note' }, t('castTracksFixed')) : null,
     ended ? el('div', { class: 'actions cast-end' },
-      el('button', { class: 'ghost', onclick: () => send({ type: 'castRetry' }) }, t('castRetry')),
       el('button', { class: 'link', onclick: () => send({ type: 'castDismiss' }) }, t('castClose'))) : null,
     full && c.pageUrl ? el('div', { class: 'muted cast-source' }, t('dSource'), ': ',
       el('a', { href: c.pageUrl, target: '_blank', rel: 'noopener' }, c.pageTitle || c.pageUrl)) : null);
@@ -146,10 +147,12 @@ export function devicePicker(state, prefs, { onChange } = {}) {
     }, state?.searching ? el('span', { class: 'spinner' }) : '⟳'));
 }
 
+export const routeHelp = (route) => t(route === 'direct' ? 'castRouteDirectHelp' : route === 'relay' ? 'castRouteRelayHelp' : 'castRouteAutoHelp');
+
 export function routePicker(prefs, { onChange } = {}) {
-  const route = prefs?.route || 'relay';
+  const route = prefs?.route || 'auto';
   return el('div', { class: 'seg cast-route', title: t('castRouteHelp') },
-    ...[['relay', t('castRouteRelay')], ['direct', t('castRouteDirect')]].map(([v, label]) => el('button', {
+    ...[['auto', t('castRouteAuto')], ['direct', t('castRouteDirect')], ['relay', t('castRouteRelay')]].map(([v, label]) => el('button', {
       class: route === v ? 'on' : '', onclick: () => onChange?.({ route: v }),
     }, label)));
 }

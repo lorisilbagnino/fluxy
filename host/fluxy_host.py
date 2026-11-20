@@ -127,6 +127,7 @@ TEXT = {
         "No TV answers at {address}": "Nessuna TV risponde all'indirizzo {address}",
         "The TV can't reach this PC on port {port}: a firewall is probably blocking it.": "La TV non riesce a collegarsi a questo PC sulla porta {port}: probabilmente la blocca un firewall.",
         "With ufw: {cmd}": "Con ufw: {cmd}",
+        "{tv} couldn't play the stream: switched to {other}.": "{tv} non è riuscita a riprodurre lo stream: passata a {other}.",
         "The TV couldn't play the original address: switched to the local app route.": "La TV non è riuscita a riprodurre l'indirizzo originale: passata al percorso tramite app locale.",
         "With firewalld: {cmd}": "Con firewalld: {cmd}",
         "Can't connect to the TV ({reason})": "Impossibile collegarsi alla TV ({reason})",
@@ -1973,10 +1974,14 @@ def _hls_formats(url: str, headers: dict) -> tuple[str | None, str | None]:
 
 
 class CastSession:
-    def __init__(self, sid: str, device: dict, route: str, spec: dict):
+    def __init__(self, sid: str, device: dict, route: str, spec: dict, twins: list | None = None, start_at: float = 0):
         self.id = sid
         self.device = device
-        self.route = route                    # 'direct' | 'relay'
+        self.mode = route                     # what the user chose: 'auto' | 'direct' | 'relay'
+        self.route = "relay" if route == "relay" else "direct"     # what is in use now
+        self.twins = twins or []              # the same TV under another protocol (e.g. AirScreen: Cast + DLNA)
+        self.start_at = float(start_at or 0)
+        self.tried: set = set()
         self.spec = spec
         self.sel = dict(spec.get("sel") or {})
         self.headers = clean_headers(spec.get("headers") or {})
@@ -2000,6 +2005,7 @@ class CastSession:
         self.lock = threading.Lock()
         self.last_emit = 0
         self.played = False                   # the TV has played something in this session
+        self.load_at = time.time()
         self.fell_back = False                # direct failed once: switched to the relay
         self.note = None
 
@@ -2014,24 +2020,58 @@ class CastSession:
             return
         self.last_emit = now
         send({"type": "cast", "sessionId": self.id, "state": self.state, "error": self.error, "route": self.route, "note": self.note,
+              "device": {k: self.device.get(k) for k in ("id", "kind", "name", "model", "host")},
               "position": round(self.pos(), 1), "duration": self.duration, "volume": self.volume, "muted": self.muted,
               "sel": self.sel, "caps": self.caps()})
 
     def caps(self) -> dict:
         cc = self.device["kind"] == "chromecast"
         hls = self.spec["kind"] == "hls"
+        if not cc and self.route == "direct":       # a DLNA TV playing the original address: no track control
+            return {"video": False, "audio": False, "subs": False, "seek": True, "volume": not self.volume_fixed}
         return {"video": self.restart or (hls and self.route == "relay") or (not cc and self.route == "relay"),
                 "audio": True, "subs": True, "seek": True, "volume": not self.volume_fixed}
 
     def fallback(self) -> bool:
-        """Direct route refused by the TV before playing anything: try once through this PC."""
-        if self.route != "direct" or self.played or self.fell_back or self.stopped:
+        """Automatic route: the TV couldn't play before anything started. Next try, in order: the same TV under its
+        other protocol, directly (no ports needed on this PC); then through this PC."""
+        if self.mode != "auto" or self.played or self.stopped:
+            return False
+        self.tried.add((self.device["id"], self.route))
+        twin = next((t for t in self.twins if (t["id"], "direct") not in self.tried), None) if self.route == "direct" else None
+        if twin:
+            nxt, route = twin, "direct"
+            self.note = T("{tv} couldn't play the stream: switched to {other}.", tv=self.device["name"], other=twin["name"])
+        elif (self.device["id"], "relay") not in self.tried:
+            nxt, route = self.device, "relay"
+            self.note = T("The TV couldn't play the original address: switched to the local app route.")
+        else:
             return False
         self.fell_back = True
-        self.route = "relay"
-        self.note = T("The TV couldn't play the original address: switched to the local app route.")
-        log("cast: direct failed, falling back to the relay")
-        threading.Thread(target=self.load, args=(self.pos() if self.offset or self.position else 0,), daemon=True).start()
+        at = self.pos() if self.offset or self.position else self.start_at
+        log("cast: fallback to", nxt["name"], route)
+
+        def go():
+            try:
+                if nxt is not self.device:
+                    old = self.ctl
+                    old.on_event = lambda ev: None     # its "connection closed" is not news
+                    self.device, self.route = nxt, route
+                    try:
+                        old.stop()
+                    except Exception:  # noqa: BLE001
+                        pass
+                    self.connect()
+                else:
+                    self.route = route
+                self.load(at)
+            except Exception as e:  # noqa: BLE001
+                log("cast fallback", traceback.format_exc())
+                if not self.fallback():
+                    self.state, self.error = "error", str(e)
+                    self.emit(force=True)
+        self.state = "loading"
+        threading.Thread(target=go, daemon=True).start()
         return True
 
     def switching(self) -> bool:
@@ -2089,6 +2129,9 @@ class CastSession:
                 self.state = mapped
             if mapped == "playing":
                 self.played = True
+            # a DLNA TV that can't play the address usually just goes back to "stopped"
+            elif st == "STOPPED" and self.route == "direct" and not self.played and time.time() - self.load_at > 4 and self.fallback():
+                return
             if ev.get("position") is not None:
                 self.position, self.pos_at = ev["position"], time.time()
             self.rate = 1.0 if self.state == "playing" else 0.0
@@ -2209,26 +2252,29 @@ class CastSession:
     # -- loading ---------------------------------------------------------------------------
     def start(self):
         try:
-            if self.device["kind"] == "chromecast":
-                for attempt in range(2):          # some receivers (e.g. AirScreen) refuse the first try now and then
-                    try:
-                        self.ctl = CastV2(self.device["host"], self.device.get("port") or 8009, self.on_event)
-                        break
-                    except (OSError, ssl.SSLError) as e:
-                        log("cast connect", self.device["host"], e)
-                        if attempt:
-                            raise RuntimeError(T("Can't connect to the TV ({reason})", reason=e)) from None
-                        time.sleep(1.5)
-                self.ctl.launch()
-            else:
-                self.ctl = Dlna(self.device, self.on_event)
-            self.load(0)
+            self.connect()
+            self.load(self.start_at)
         except Exception as e:  # noqa: BLE001
             log("cast start", traceback.format_exc())
-            if self.fell_back:            # the relay attempt is already on its way
+            if self.fell_back or self.fallback():     # another try is already on its way
                 return
             self.state, self.error = "error", str(e)
             self.emit(force=True)
+
+    def connect(self):
+        if self.device["kind"] == "chromecast":
+            for attempt in range(3):          # some receivers (e.g. AirScreen) refuse a try now and then
+                try:
+                    self.ctl = CastV2(self.device["host"], self.device.get("port") or 8009, self.on_event)
+                    break
+                except (OSError, ssl.SSLError) as e:
+                    log("cast connect", self.device["host"], e)
+                    if attempt == 2:
+                        raise RuntimeError(T("Can't connect to the TV ({reason})", reason=e)) from None
+                    time.sleep(1.5)
+            self.ctl.launch()
+        else:
+            self.ctl = Dlna(self.device, self.on_event)
 
     def new_route(self, route):
         if self.relay_route:
@@ -2238,6 +2284,7 @@ class CastSession:
         return RELAY.base(route, self.device["host"])
 
     def load(self, at: float):
+        self.load_at = time.time()
         with self.lock:
             self.state, self.error = "loading", None
             self.emit(force=True)
@@ -2503,7 +2550,13 @@ def cast_handle(msg: dict):
         old = CAST.get("session")
         if old:
             threading.Thread(target=old.stop, daemon=True).start()
-        s = CastSession(msg["sessionId"], dev, msg.get("route") or "relay", msg["spec"])
+        twins = []
+        for tw in msg.get("twins") or []:
+            if tw.get("kind") == "dlna" and tw.get("services"):
+                twins.append({**tw, "services": {k: tuple(v) for k, v in tw["services"].items()}})
+            elif tw.get("kind") == "chromecast":
+                twins.append(tw)
+        s = CastSession(msg["sessionId"], dev, msg.get("route") or "auto", msg["spec"], twins, msg.get("startAt") or 0)
         CAST["session"] = s
         threading.Thread(target=s.start, daemon=True).start()
     elif t in ("castControl", "castSelect"):

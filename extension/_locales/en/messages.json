@@ -562,6 +562,18 @@
   "castStale": {
     "message": "not seen in the last search"
   },
+  "castRouteAuto": {
+    "message": "automatic"
+  },
+  "castRouteAutoHelp": {
+    "message": "Tries the TV on its own first (nothing to open on this PC), then the same TV under its other protocol, and only as a last resort through the local app."
+  },
+  "castRecastTitle": {
+    "message": "Cast again now, from the current position"
+  },
+  "castTracksFixed": {
+    "message": "This TV is playing the original stream by itself: audio and subtitles are the ones it picks. To choose them, cast through the local app."
+  },
   "castFirewall": {
     "message": "The local app finds TVs on UDP ports 5353 (Chromecast) and 1900 (DLNA), and with \"through the local app\" the TV fetches the video from this PC on TCP port 8790: if the PC has a firewall, allow them from the home network (with ufw: sudo ufw allow from 192.168.1.0/24 to any port 8790 proto tcp, and the same with port 1900 proto udp for DLNA TVs)."
   },

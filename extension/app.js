@@ -5,7 +5,7 @@
 import { t, UI_LANG, translate, $, send, el, renderJob, sortJobs, setRerender, restoreEditFocus, renderOverall, speedLimitControl } from './ui.js';
 import { mountSettings } from './settings.js';
 import { DONATE_URL } from './build-flags.js';
-import { castShown, mountCastManager, deviceLabel, routePicker } from './cast-ui.js';
+import { castShown, mountCastManager, deviceLabel, routePicker, routeHelp } from './cast-ui.js';
 
 // ---- tabs (URL hash) ----------------------------------------------------------------
 const TABS = ['downloads', 'cast', 'settings', 'about'];
@@ -68,7 +68,7 @@ function renderCastTab() {
   $('#cast-noapp').hidden = !noApp;
   $('#cast-noapp').textContent = noApp ? t('castNeedsApp') : '';
   const list = castDevices?.devices || [];
-  const save = (patch) => chrome.storage.local.set({ castPrefs: { route: 'relay', ...castPrefs, ...patch } });
+  const save = (patch) => chrome.storage.local.set({ castPrefs: { route: 'auto', ...castPrefs, ...patch, v: 2 } });
   $('#btn-cast-search').disabled = !!castDevices?.searching || noApp;
   $('#btn-cast-search').textContent = castDevices?.searching ? t('castSearching') : t('castSearch');
   $('#cast-devices').replaceChildren(...[
@@ -79,7 +79,7 @@ function renderCastTab() {
     !list.length ? el('p', { class: 'muted' }, castDevices?.searching ? t('castSearching') : castDevices?.at ? t('castNoneFound') : t('castNoDevices')) : null,
     castDevices?.error ? el('p', { class: 'err' }, castDevices.error) : null,
     el('div', { class: 'cast-route-row' }, el('span', {}, t('castRouteLabel')), routePicker(castPrefs, { onChange: save }),
-      el('small', { class: 'muted' }, (castPrefs?.route || 'relay') === 'direct' ? t('castRouteDirectHelp') : t('castRouteRelayHelp'))),
+      el('small', { class: 'muted' }, routeHelp(castPrefs?.route || 'auto'))),
   ].filter(Boolean));
 }
 $('#cast-address').placeholder = t('castAddPlaceholder');

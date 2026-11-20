@@ -7,7 +7,7 @@ import {
   t, UI_LANG, translate, $, send, el, langLabel, nameIsJustLang, prettyCodec, listFmt, channelsLabel,
   fmtBitrate, fmtDuration, fmtSize, renderJob, sortJobs, setRerender, restoreEditFocus, renderOverall, speedLimitControl,
 } from './ui.js';
-import { castShown, mountCastManager, devicePicker, routePicker } from './cast-ui.js';
+import { castShown, mountCastManager, devicePicker, routePicker, routeHelp } from './cast-ui.js';
 
 let tabId = null;
 let tabTitle = '';
@@ -247,7 +247,7 @@ function modeSwitch(sel) {
     el('button', { class: sel.mode === 'cast' ? 'on' : '', onclick: () => set('cast') }, `📺 ${t('castTo')}`));
 }
 
-const saveCastPrefs = (patch) => chrome.storage.local.set({ castPrefs: { route: 'relay', ...castPrefs, ...patch } });
+const saveCastPrefs = (patch) => chrome.storage.local.set({ castPrefs: { route: 'auto', ...castPrefs, ...patch, v: 2 } });
 
 /** Cast mode: TV, route and the "Cast" button (instead of file name, format and "Download"). */
 function castActions(s, sel) {
@@ -269,7 +269,7 @@ function castActions(s, sel) {
   return [err,
     el('div', { class: 'actions cast-actions' }, devicePicker(castDevices, castPrefs, { onChange: saveCastPrefs }), go),
     el('div', { class: 'cast-route-row' }, routePicker(castPrefs, { onChange: saveCastPrefs }),
-      el('small', { class: 'muted' }, (castPrefs?.route || 'relay') === 'direct' ? t('castRouteDirectHelp') : t('castRouteRelayHelp'))),
+      el('small', { class: 'muted' }, routeHelp(castPrefs?.route || 'auto'))),
     castDevices?.error ? el('div', { class: 'err' }, castDevices.error) : null,
     !castDevices?.searching && castDevices?.at && !castDevices?.devices?.length ? el('div', { class: 'muted hint' }, t('castNoneFound')) : null];
 }

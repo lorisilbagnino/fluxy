@@ -428,6 +428,10 @@ async function checkHost() {
 // storage.session "cast" (shown by the stream manager in the popup and the Fluxy page); found TVs in
 // storage.session "castDevices"; the chosen TV and route in storage.local "castPrefs".
 const castLive = (c) => !!c && !['stopped', 'error', 'ended', 'idle'].includes(c.state);
+// 0.13 saved "through the local app" as the default without asking: move those to the new automatic route
+chrome.storage.local.get('castPrefs').then(({ castPrefs }) => {
+  if (castPrefs && !castPrefs.v) chrome.storage.local.set({ castPrefs: { ...castPrefs, route: 'auto', v: 2 } });
+});
 async function getCast() { return (await chrome.storage.session.get('cast')).cast || null; }
 let castLock = Promise.resolve();
 function mutateCast(fn) {
@@ -461,7 +465,7 @@ async function castDiscover() {
     const { castPrefs } = await chrome.storage.local.get('castPrefs');
     if (all.length && !all.some((d) => d.id === castPrefs?.deviceId)) {
       const best = all.find((d) => !d.audioOnly) || all[0];
-      await chrome.storage.local.set({ castPrefs: { route: 'relay', ...castPrefs, deviceId: best.id } });
+      await chrome.storage.local.set({ castPrefs: { route: 'auto', ...castPrefs, v: 2, deviceId: best.id } });
     }
   } catch (e) {
     await setDevices({ searching: false, error: e.message });
@@ -477,7 +481,7 @@ async function castAddDevice(address) {
   const { castKnown = [] } = await chrome.storage.local.get('castKnown');
   await chrome.storage.local.set({ castKnown: [...castKnown.filter((d) => d.id !== dev.id), dev] });
   const { castPrefs } = await chrome.storage.local.get('castPrefs');
-  await chrome.storage.local.set({ castPrefs: { route: 'relay', ...castPrefs, deviceId: dev.id } });
+  await chrome.storage.local.set({ castPrefs: { route: 'auto', ...castPrefs, v: 2, deviceId: dev.id } });
   return dev;
 }
 
@@ -502,7 +506,7 @@ async function castStart({ tabId, streamId, videoId, audioId, subId, title }) {
     || (await chrome.storage.local.get('castKnown')).castKnown || [];
   const device = devices.find((x) => x.id === castPrefs?.deviceId);
   if (!device) throw new Error(tx('castPickDevice'));
-  const route = castPrefs?.route || 'relay';
+  const route = castPrefs?.route || 'auto';
   const sel = { videoId: videoId || d.video?.[0]?.id || null, audioId: audioId || null, subId: subId || null };
   const name = (title || s.title || '').trim() || 'Fluxy';
   const spec = castSpec(s, d, sel, name);
@@ -516,21 +520,28 @@ async function castStart({ tabId, streamId, videoId, audioId, subId, title }) {
   };
   const old = await getCast();
   if (castLive(old)) { try { hostSend({ type: 'castControl', sessionId: old.id, action: 'stop' }); } catch {} }
-  await chrome.storage.session.set({ cast, lastCastSpec: { spec, deviceId: device.id, device, route } });
-  hostSend({ type: 'castStart', sessionId: cast.id, deviceId: device.id, device, route, spec });
+  await chrome.storage.session.set({ cast, lastCastSpec: { spec, deviceId: device.id, device, twins: devices.filter((x) => x.host === device.host && x.id !== device.id && !x.audioOnly), route } });
+  // the same TV under its other protocol (AirScreen & co. are both a Chromecast and a DLNA renderer)
+  const twins = devices.filter((x) => x.host === device.host && x.id !== device.id && !x.audioOnly);
+  hostSend({ type: 'castStart', sessionId: cast.id, deviceId: device.id, device, twins, route, spec });
   keepAlive();
   return cast.id;
 }
 
-/** "Retry" on a failed or ended cast: same stream, same TV, from where it stopped. */
+/** "Cast again": same stream and tracks, on the TV that is playing it now, from the current position. */
 async function castRetry() {
   const c = await getCast();
-  const { lastCastSpec } = await chrome.storage.session.get('lastCastSpec');
-  if (!c || !lastCastSpec) return;
+  const { lastCastSpec: last } = await chrome.storage.session.get('lastCastSpec');
+  if (!c || !last) return;
   const id = crypto.randomUUID().slice(0, 12);
-  await chrome.storage.session.set({ cast: { ...c, id, state: 'connecting', error: null } });
-  hostSend({ type: 'castStart', sessionId: id, deviceId: lastCastSpec.deviceId, device: lastCastSpec.device, route: lastCastSpec.route,
-    spec: { ...lastCastSpec.spec, sel: c.sel } });
+  const known = [last.device, ...(last.twins || [])];
+  const device = known.find((d) => d.id === c.device?.id) || last.device;
+  const twins = known.filter((d) => d.id !== device.id);
+  // the route that worked is kept (a fallback already happened), otherwise the chosen one
+  const route = c.route && c.route !== (last.route === 'relay' ? 'relay' : 'direct') ? c.route : last.route;
+  await chrome.storage.session.set({ cast: { ...c, id, state: 'connecting', error: null, note: null } });
+  hostSend({ type: 'castStart', sessionId: id, deviceId: device.id, device, twins, route,
+    startAt: ['ended'].includes(c.state) ? 0 : Math.max(0, (c.position || 0) - 2), spec: { ...last.spec, sel: c.sel } });
   keepAlive();
 }
 
@@ -540,7 +551,17 @@ function onCastEvent(msg) {
     for (const k of ['state', 'error', 'position', 'duration', 'volume', 'muted', 'sel', 'caps', 'route', 'note']) {
       if (msg[k] !== undefined) c[k] = msg[k];
     }
+    if (msg.device?.id && msg.device.id !== c.device?.id) c.device = { ...c.device, ...msg.device };
     c.at = Date.now();
+  }).then(async () => {
+    // a fallback to the same TV's other protocol worked: start from that one next time
+    if (msg.state !== 'playing' || !msg.device?.id) return;
+    const { castPrefs } = await chrome.storage.local.get('castPrefs');
+    if (castPrefs?.deviceId && castPrefs.deviceId !== msg.device.id && (castPrefs.route || 'auto') === 'auto') {
+      const { castKnown = [] } = await chrome.storage.local.get('castKnown');
+      const was = castKnown.find((d) => d.id === castPrefs.deviceId);
+      if (was && was.host === msg.device.host) await chrome.storage.local.set({ castPrefs: { ...castPrefs, deviceId: msg.device.id } });
+    }
   });
 }
 
